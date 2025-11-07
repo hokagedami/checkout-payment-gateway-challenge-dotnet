@@ -10,6 +10,12 @@ public static class CardNumberExtensions
     /// <returns>The last four digits as a string, or empty string if extraction fails</returns>
     public static string ExtractLastFourDigits(this string? cardNumber)
     {
-        throw new NotImplementedException();
+        if (string.IsNullOrWhiteSpace(cardNumber) || cardNumber.Length < 4)
+        {
+            return string.Empty;
+        }
+
+        var lastFour = cardNumber[^4..];
+        return lastFour.All(char.IsDigit) ? lastFour : string.Empty;
     }
 }
