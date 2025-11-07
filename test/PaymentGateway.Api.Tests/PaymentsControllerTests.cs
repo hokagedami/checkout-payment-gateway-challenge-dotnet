@@ -2,10 +2,9 @@
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
-
 using PaymentGateway.Api.Controllers;
 using PaymentGateway.Api.Models.Responses;
-using PaymentGateway.Api.Services;
+using PaymentGateway.Api.Repositories;
 
 namespace PaymentGateway.Api.Tests;
 
@@ -23,7 +22,7 @@ public class PaymentsControllerTests
             ExpiryYear = _random.Next(2023, 2030),
             ExpiryMonth = _random.Next(1, 12),
             Amount = _random.Next(1, 10000),
-            CardNumberLastFour = _random.Next(1111, 9999),
+            CardNumberLastFour = _random.Next(1111, 9999).ToString(),
             Currency = "GBP"
         };
 
