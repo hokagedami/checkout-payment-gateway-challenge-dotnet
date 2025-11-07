@@ -4,9 +4,10 @@ using PaymentGateway.Api.Models.Requests;
 
 namespace PaymentGateway.Api.Tests.Validation;
 
+[TestFixture]
 public class FutureExpiryDateAttributeTests
 {
-    [Fact]
+    [Test]
     public void Validate_WithFutureDate_ReturnsSuccess()
     {
         // Arrange
@@ -27,11 +28,11 @@ public class FutureExpiryDateAttributeTests
         var isValid = Validator.TryValidateObject(request, context, results, true);
 
         // Assert
-        Assert.True(isValid);
-        Assert.Empty(results);
+        Assert.That(isValid, Is.True);
+        Assert.That(results, Is.Empty);
     }
 
-    [Fact]
+    [Test]
     public void Validate_WithPastDate_ReturnsError()
     {
         // Arrange
@@ -52,11 +53,11 @@ public class FutureExpiryDateAttributeTests
         var isValid = Validator.TryValidateObject(request, context, results, true);
 
         // Assert
-        Assert.False(isValid);
-        Assert.Contains(results, r => r.ErrorMessage != null && r.ErrorMessage.Contains("expiry date must be in the future"));
+        Assert.That(isValid, Is.False);
+        Assert.That(results, Does.Contain(results.FirstOrDefault(r => r.ErrorMessage != null && r.ErrorMessage.Contains("expiry date must be in the future"))));
     }
 
-    [Fact]
+    [Test]
     public void Validate_WithCurrentMonthAndYear_ReturnsSuccess()
     {
         // Arrange
@@ -79,10 +80,10 @@ public class FutureExpiryDateAttributeTests
 
         // Assert
         // Should be valid as we check against the last day of the month
-        Assert.True(isValid);
+        Assert.That(isValid, Is.True);
     }
 
-    [Fact]
+    [Test]
     public void Validate_WithLastMonthOfCurrentYear_ReturnsError()
     {
         // Arrange
@@ -110,11 +111,11 @@ public class FutureExpiryDateAttributeTests
         var isValid = Validator.TryValidateObject(request, context, results, true);
 
         // Assert
-        Assert.False(isValid);
-        Assert.Contains(results, r => r.ErrorMessage != null && r.ErrorMessage.Contains("expiry date must be in the future"));
+        Assert.That(isValid, Is.False);
+        Assert.That(results, Does.Contain(results.FirstOrDefault(r => r.ErrorMessage != null && r.ErrorMessage.Contains("expiry date must be in the future"))));
     }
 
-    [Fact]
+    [Test]
     public void Validate_WithNextMonth_ReturnsSuccess()
     {
         // Arrange
@@ -138,14 +139,13 @@ public class FutureExpiryDateAttributeTests
         var isValid = Validator.TryValidateObject(request, context, results, true);
 
         // Assert
-        Assert.True(isValid);
+        Assert.That(isValid, Is.True);
     }
 
-    [Theory]
-    [InlineData(1, 2026)]
-    [InlineData(6, 2027)]
-    [InlineData(12, 2028)]
-    [InlineData(3, 2030)]
+    [TestCase(1, 2026)]
+    [TestCase(6, 2027)]
+    [TestCase(12, 2028)]
+    [TestCase(3, 2030)]
     public void Validate_WithVariousFutureDates_ReturnsSuccess(int month, int year)
     {
         // Arrange
@@ -166,14 +166,13 @@ public class FutureExpiryDateAttributeTests
         var isValid = Validator.TryValidateObject(request, context, results, true);
 
         // Assert
-        Assert.True(isValid);
+        Assert.That(isValid, Is.True);
     }
 
-    [Theory]
-    [InlineData(1, 2020)]
-    [InlineData(12, 2019)]
-    [InlineData(6, 2015)]
-    [InlineData(3, 2010)]
+    [TestCase(1, 2020)]
+    [TestCase(12, 2019)]
+    [TestCase(6, 2015)]
+    [TestCase(3, 2010)]
     public void Validate_WithVariousPastDates_ReturnsError(int month, int year)
     {
         // Arrange
@@ -194,11 +193,11 @@ public class FutureExpiryDateAttributeTests
         var isValid = Validator.TryValidateObject(request, context, results, true);
 
         // Assert
-        Assert.False(isValid);
-        Assert.Contains(results, r => r.ErrorMessage != null && r.ErrorMessage.Contains("expiry date must be in the future"));
+        Assert.That(isValid, Is.False);
+        Assert.That(results, Does.Contain(results.FirstOrDefault(r => r.ErrorMessage != null && r.ErrorMessage.Contains("expiry date must be in the future"))));
     }
 
-    [Fact]
+    [Test]
     public void Validate_WithDecemberOfNextYear_ReturnsSuccess()
     {
         // Arrange
@@ -219,10 +218,10 @@ public class FutureExpiryDateAttributeTests
         var isValid = Validator.TryValidateObject(request, context, results, true);
 
         // Assert
-        Assert.True(isValid);
+        Assert.That(isValid, Is.True);
     }
 
-    [Fact]
+    [Test]
     public void Validate_WithJanuaryOfNextYear_ReturnsSuccess()
     {
         // Arrange
@@ -243,6 +242,6 @@ public class FutureExpiryDateAttributeTests
         var isValid = Validator.TryValidateObject(request, context, results, true);
 
         // Assert
-        Assert.True(isValid);
+        Assert.That(isValid, Is.True);
     }
 }

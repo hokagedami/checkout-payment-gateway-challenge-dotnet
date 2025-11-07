@@ -1,23 +1,81 @@
-﻿using System.Net;
+﻿using Moq;
+using System.Net;
 using System.Net.Http.Json;
-using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Extensions.DependencyInjection;
-using Moq;
-using PaymentGateway.Api.Controllers;
-using PaymentGateway.Api.Models;
+using PaymentGateway.Api.Enums;
+using PaymentGateway.Api.Services;
 using PaymentGateway.Api.Models.Bank;
+using PaymentGateway.Api.Repositories;
+using Microsoft.AspNetCore.Mvc.Testing;
 using PaymentGateway.Api.Models.Requests;
 using PaymentGateway.Api.Models.Responses;
-using PaymentGateway.Api.Repositories;
-using PaymentGateway.Api.Services;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace PaymentGateway.Api.Tests.Controllers;
 
+[TestFixture]
 public class PaymentsControllerTests
 {
-    private readonly Random _random = new();
+    private Random _random = null!;
+    private WebApplicationFactory<Program> _factory = null!;
 
-    [Fact]
+    [SetUp]
+    public void SetUp()
+    {
+        _random = new Random();
+        _factory = new WebApplicationFactory<Program>();
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        _factory?.Dispose();
+    }
+
+    /// <summary>
+    /// Creates a test HTTP client with optional mock dependencies
+    /// </summary>
+    private HttpClient CreateTestClient(
+        PaymentsRepository? paymentsRepository = null,
+        Mock<IBankClient>? mockBankClient = null)
+    {
+        var repository = paymentsRepository ?? new PaymentsRepository();
+
+        // Create a default mock if none provided
+        var bankClient = mockBankClient ?? new Mock<IBankClient>();
+
+        return _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
+            {
+                // Remove existing registrations
+                var repositoryDescriptor = services.SingleOrDefault(d => d.ServiceType == typeof(PaymentsRepository));
+                if (repositoryDescriptor != null)
+                    services.Remove(repositoryDescriptor);
+
+                var bankClientDescriptor = services.SingleOrDefault(d => d.ServiceType == typeof(IBankClient));
+                if (bankClientDescriptor != null)
+                    services.Remove(bankClientDescriptor);
+
+                // Add test instances
+                services.AddSingleton(repository);
+                services.AddSingleton(bankClient.Object);
+            }))
+            .CreateClient();
+    }
+
+    /// <summary>
+    /// Creates a valid payment request with default values
+    /// </summary>
+    private static PostPaymentRequest CreateValidPaymentRequest() => new()
+    {
+        CardNumber = "2222405343248877",
+        ExpiryMonth = 12,
+        ExpiryYear = 2026,
+        Currency = "GBP",
+        Amount = 100,
+        Cvv = "123"
+    };
+
+    [Test]
     public async Task RetrievesAPaymentSuccessfully()
     {
         // Arrange
@@ -34,36 +92,31 @@ public class PaymentsControllerTests
         var paymentsRepository = new PaymentsRepository();
         paymentsRepository.Add(payment);
 
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.WithWebHostBuilder(builder =>
-            builder.ConfigureServices(services => ((ServiceCollection)services)
-                .AddSingleton(paymentsRepository)))
-            .CreateClient();
+        var client = CreateTestClient(paymentsRepository);
 
         // Act
         var response = await client.GetAsync($"/api/Payments/{payment.Id}");
         var paymentResponse = await response.Content.ReadFromJsonAsync<GetPaymentResponse>();
 
         // Assert
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.NotNull(paymentResponse);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(paymentResponse, Is.Not.Null);
     }
 
-    [Fact]
+    [Test]
     public async Task Returns404IfPaymentNotFound()
     {
         // Arrange
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.CreateClient();
+        var client = CreateTestClient();
 
         // Act
         var response = await client.GetAsync($"/api/Payments/{Guid.NewGuid()}");
 
         // Assert
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPayment_WithValidRequest_ReturnsAuthorized()
     {
         // Arrange
@@ -73,37 +126,21 @@ public class PaymentsControllerTests
 
         var paymentsRepository = new PaymentsRepository();
 
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.WithWebHostBuilder(builder =>
-            builder.ConfigureServices(services =>
-            {
-                ((ServiceCollection)services).AddSingleton(paymentsRepository);
-                ((ServiceCollection)services).AddSingleton(mockBankClient.Object);
-            }))
-            .CreateClient();
-
-        var request = new PostPaymentRequest
-        {
-            CardNumber = "2222405343248877",
-            ExpiryMonth = 12,
-            ExpiryYear = 2026,
-            Currency = "GBP",
-            Amount = 100,
-            Cvv = "123"
-        };
+        var client = CreateTestClient(paymentsRepository, mockBankClient);
+        var request = CreateValidPaymentRequest();
 
         // Act
         var response = await client.PostAsJsonAsync("/api/Payments", request);
         var paymentResponse = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
 
         // Assert
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.NotNull(paymentResponse);
-        Assert.Equal(PaymentStatus.Authorized, paymentResponse.Status);
-        Assert.Equal("8877", paymentResponse.CardNumberLastFour);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(paymentResponse, Is.Not.Null);
+        Assert.That(paymentResponse!.Status, Is.EqualTo(PaymentStatus.Authorized));
+        Assert.That(paymentResponse.CardNumberLastFour, Is.EqualTo("8877"));
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPayment_WithValidRequest_ReturnsDeclined()
     {
         // Arrange
@@ -113,14 +150,7 @@ public class PaymentsControllerTests
 
         var paymentsRepository = new PaymentsRepository();
 
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.WithWebHostBuilder(builder =>
-            builder.ConfigureServices(services =>
-            {
-                ((ServiceCollection)services).AddSingleton(paymentsRepository);
-                ((ServiceCollection)services).AddSingleton(mockBankClient.Object);
-            }))
-            .CreateClient();
+        var client = CreateTestClient(paymentsRepository, mockBankClient);
 
         var request = new PostPaymentRequest
         {
@@ -137,167 +167,110 @@ public class PaymentsControllerTests
         var paymentResponse = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
 
         // Assert
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.NotNull(paymentResponse);
-        Assert.Equal(PaymentStatus.Declined, paymentResponse.Status);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(paymentResponse, Is.Not.Null);
+        Assert.That(paymentResponse!.Status, Is.EqualTo(PaymentStatus.Declined));
     }
 
-    [Theory]
-    [InlineData("123")]
-    [InlineData("12345678901234567890")]
-    [InlineData("abcd1234567890")]
+    [TestCase("123")]
+    [TestCase("12345678901234567890")]
+    [TestCase("abcd1234567890")]
     public async Task ProcessPayment_WithInvalidCardNumber_ReturnsBadRequest(string cardNumber)
     {
         // Arrange
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.CreateClient();
-
-        var request = new PostPaymentRequest
-        {
-            CardNumber = cardNumber,
-            ExpiryMonth = 12,
-            ExpiryYear = 2026,
-            Currency = "GBP",
-            Amount = 100,
-            Cvv = "123"
-        };
+        var client = CreateTestClient();
+        var request = CreateValidPaymentRequest();
+        request.CardNumber = cardNumber;
 
         // Act
         var response = await client.PostAsJsonAsync("/api/Payments", request);
 
         // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
 
-    [Theory]
-    [InlineData(0)]
-    [InlineData(13)]
+    [TestCase(0)]
+    [TestCase(13)]
     public async Task ProcessPayment_WithInvalidExpiryMonth_ReturnsBadRequest(int month)
     {
         // Arrange
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.CreateClient();
-
-        var request = new PostPaymentRequest
-        {
-            CardNumber = "2222405343248877",
-            ExpiryMonth = month,
-            ExpiryYear = 2026,
-            Currency = "GBP",
-            Amount = 100,
-            Cvv = "123"
-        };
+        var client = CreateTestClient();
+        var request = CreateValidPaymentRequest();
+        request.ExpiryMonth = month;
 
         // Act
         var response = await client.PostAsJsonAsync("/api/Payments", request);
 
         // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPayment_WithExpiredCard_ReturnsBadRequest()
     {
         // Arrange
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.CreateClient();
-
-        var request = new PostPaymentRequest
-        {
-            CardNumber = "2222405343248877",
-            ExpiryMonth = 1,
-            ExpiryYear = 2020,
-            Currency = "GBP",
-            Amount = 100,
-            Cvv = "123"
-        };
+        var client = CreateTestClient();
+        var request = CreateValidPaymentRequest();
+        request.ExpiryMonth = 1;
+        request.ExpiryYear = 2020;
 
         // Act
         var response = await client.PostAsJsonAsync("/api/Payments", request);
 
         // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
 
-    [Theory]
-    [InlineData("US")]
-    [InlineData("GBPP")]
-    [InlineData("XXX")]
+    [TestCase("US")]
+    [TestCase("GBPP")]
+    [TestCase("XXX")]
     public async Task ProcessPayment_WithInvalidCurrency_ReturnsBadRequest(string currency)
     {
         // Arrange
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.CreateClient();
-
-        var request = new PostPaymentRequest
-        {
-            CardNumber = "2222405343248877",
-            ExpiryMonth = 12,
-            ExpiryYear = 2026,
-            Currency = currency,
-            Amount = 100,
-            Cvv = "123"
-        };
+        var client = CreateTestClient();
+        var request = CreateValidPaymentRequest();
+        request.Currency = currency;
 
         // Act
         var response = await client.PostAsJsonAsync("/api/Payments", request);
 
         // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
 
-    [Theory]
-    [InlineData("12")]
-    [InlineData("12345")]
-    [InlineData("abc")]
+    [TestCase("12")]
+    [TestCase("12345")]
+    [TestCase("abc")]
     public async Task ProcessPayment_WithInvalidCvv_ReturnsBadRequest(string cvv)
     {
         // Arrange
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.CreateClient();
-
-        var request = new PostPaymentRequest
-        {
-            CardNumber = "2222405343248877",
-            ExpiryMonth = 12,
-            ExpiryYear = 2026,
-            Currency = "GBP",
-            Amount = 100,
-            Cvv = cvv
-        };
+        var client = CreateTestClient();
+        var request = CreateValidPaymentRequest();
+        request.Cvv = cvv;
 
         // Act
         var response = await client.PostAsJsonAsync("/api/Payments", request);
 
         // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPayment_WithInvalidAmount_ReturnsBadRequest()
     {
         // Arrange
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.CreateClient();
-
-        var request = new PostPaymentRequest
-        {
-            CardNumber = "2222405343248877",
-            ExpiryMonth = 12,
-            ExpiryYear = 2026,
-            Currency = "GBP",
-            Amount = 0,
-            Cvv = "123"
-        };
+        var client = CreateTestClient();
+        var request = CreateValidPaymentRequest();
+        request.Amount = 0;
 
         // Act
         var response = await client.PostAsJsonAsync("/api/Payments", request);
 
         // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPayment_WhenBankReturnsNull_Returns503()
     {
         // Arrange
@@ -307,14 +280,7 @@ public class PaymentsControllerTests
 
         var paymentsRepository = new PaymentsRepository();
 
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.WithWebHostBuilder(builder =>
-            builder.ConfigureServices(services =>
-            {
-                ((ServiceCollection)services).AddSingleton(paymentsRepository);
-                ((ServiceCollection)services).AddSingleton(mockBankClient.Object);
-            }))
-            .CreateClient();
+        var client = CreateTestClient(paymentsRepository, mockBankClient);
 
         var request = new PostPaymentRequest
         {
@@ -330,10 +296,10 @@ public class PaymentsControllerTests
         var response = await client.PostAsJsonAsync("/api/Payments", request);
 
         // Assert
-        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.ServiceUnavailable));
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPayment_StoresPaymentInRepository()
     {
         // Arrange
@@ -343,14 +309,7 @@ public class PaymentsControllerTests
 
         var paymentsRepository = new PaymentsRepository();
 
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.WithWebHostBuilder(builder =>
-            builder.ConfigureServices(services =>
-            {
-                ((ServiceCollection)services).AddSingleton(paymentsRepository);
-                ((ServiceCollection)services).AddSingleton(mockBankClient.Object);
-            }))
-            .CreateClient();
+        var client = CreateTestClient(paymentsRepository, mockBankClient);
 
         var request = new PostPaymentRequest
         {
@@ -367,14 +326,14 @@ public class PaymentsControllerTests
         var paymentResponse = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
 
         // Assert
-        Assert.NotNull(paymentResponse);
+        Assert.That(paymentResponse, Is.Not.Null);
         var storedPayment = paymentsRepository.Get(paymentResponse.Id);
-        Assert.NotNull(storedPayment);
-        Assert.Equal(paymentResponse.Id, storedPayment.Id);
-        Assert.Equal("3456", storedPayment.CardNumberLastFour);
+        Assert.That(storedPayment, Is.Not.Null);
+        Assert.That(storedPayment.Id, Is.EqualTo(paymentResponse.Id));
+        Assert.That(storedPayment.CardNumberLastFour, Is.EqualTo("3456"));
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPayment_WithMultipleCurrencies_AllSucceed()
     {
         // Arrange
@@ -384,14 +343,7 @@ public class PaymentsControllerTests
 
         var paymentsRepository = new PaymentsRepository();
 
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.WithWebHostBuilder(builder =>
-            builder.ConfigureServices(services =>
-            {
-                ((ServiceCollection)services).AddSingleton(paymentsRepository);
-                ((ServiceCollection)services).AddSingleton(mockBankClient.Object);
-            }))
-            .CreateClient();
+        var client = CreateTestClient(paymentsRepository, mockBankClient);
 
         var currencies = new[] { "USD", "GBP", "EUR" };
 
@@ -411,13 +363,13 @@ public class PaymentsControllerTests
             var response = await client.PostAsJsonAsync("/api/Payments", request);
             var paymentResponse = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
 
-            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-            Assert.NotNull(paymentResponse);
-            Assert.Equal(currency, paymentResponse.Currency);
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That(paymentResponse, Is.Not.Null);
+            Assert.That(paymentResponse.Currency, Is.EqualTo(currency));
         }
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPayment_WithDifferentCardLengths_AllSucceed()
     {
         // Arrange
@@ -427,14 +379,7 @@ public class PaymentsControllerTests
 
         var paymentsRepository = new PaymentsRepository();
 
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.WithWebHostBuilder(builder =>
-            builder.ConfigureServices(services =>
-            {
-                ((ServiceCollection)services).AddSingleton(paymentsRepository);
-                ((ServiceCollection)services).AddSingleton(mockBankClient.Object);
-            }))
-            .CreateClient();
+        var client = CreateTestClient(paymentsRepository, mockBankClient);
 
         var cardNumbers = new[]
         {
@@ -460,11 +405,11 @@ public class PaymentsControllerTests
             };
 
             var response = await client.PostAsJsonAsync("/api/Payments", request);
-            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         }
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPayment_With3DigitCvv_Succeeds()
     {
         // Arrange
@@ -474,14 +419,7 @@ public class PaymentsControllerTests
 
         var paymentsRepository = new PaymentsRepository();
 
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.WithWebHostBuilder(builder =>
-            builder.ConfigureServices(services =>
-            {
-                ((ServiceCollection)services).AddSingleton(paymentsRepository);
-                ((ServiceCollection)services).AddSingleton(mockBankClient.Object);
-            }))
-            .CreateClient();
+        var client = CreateTestClient(paymentsRepository, mockBankClient);
 
         var request = new PostPaymentRequest
         {
@@ -497,10 +435,10 @@ public class PaymentsControllerTests
         var response = await client.PostAsJsonAsync("/api/Payments", request);
 
         // Assert
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPayment_With4DigitCvv_Succeeds()
     {
         // Arrange
@@ -510,14 +448,7 @@ public class PaymentsControllerTests
 
         var paymentsRepository = new PaymentsRepository();
 
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.WithWebHostBuilder(builder =>
-            builder.ConfigureServices(services =>
-            {
-                ((ServiceCollection)services).AddSingleton(paymentsRepository);
-                ((ServiceCollection)services).AddSingleton(mockBankClient.Object);
-            }))
-            .CreateClient();
+        var client = CreateTestClient(paymentsRepository, mockBankClient);
 
         var request = new PostPaymentRequest
         {
@@ -533,10 +464,10 @@ public class PaymentsControllerTests
         var response = await client.PostAsJsonAsync("/api/Payments", request);
 
         // Assert
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
     }
 
-    [Fact]
+    [Test]
     public async Task GetPayment_ReturnsCorrectPaymentDetails()
     {
         // Arrange
@@ -555,10 +486,18 @@ public class PaymentsControllerTests
         var paymentsRepository = new PaymentsRepository();
         paymentsRepository.Add(payment);
 
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
+        var webApplicationFactory = new WebApplicationFactory<Program>();
         var client = webApplicationFactory.WithWebHostBuilder(builder =>
-            builder.ConfigureServices(services => ((ServiceCollection)services)
-                .AddSingleton(paymentsRepository)))
+            builder.ConfigureServices(services =>
+            {
+                // Remove existing registration
+                var repositoryDescriptor = services.SingleOrDefault(d => d.ServiceType == typeof(PaymentsRepository));
+                if (repositoryDescriptor != null)
+                    services.Remove(repositoryDescriptor);
+
+                // Add test instance
+                services.AddSingleton(paymentsRepository);
+            }))
             .CreateClient();
 
         // Act
@@ -566,18 +505,18 @@ public class PaymentsControllerTests
         var paymentResponse = await response.Content.ReadFromJsonAsync<GetPaymentResponse>();
 
         // Assert
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.NotNull(paymentResponse);
-        Assert.Equal(paymentId, paymentResponse.Id);
-        Assert.Equal(PaymentStatus.Authorized, paymentResponse.Status);
-        Assert.Equal("5678", paymentResponse.CardNumberLastFour);
-        Assert.Equal(3, paymentResponse.ExpiryMonth);
-        Assert.Equal(2028, paymentResponse.ExpiryYear);
-        Assert.Equal("EUR", paymentResponse.Currency);
-        Assert.Equal(2500, paymentResponse.Amount);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(paymentResponse, Is.Not.Null);
+        Assert.That(paymentResponse.Id, Is.EqualTo(paymentId));
+        Assert.That(paymentResponse!.Status, Is.EqualTo(PaymentStatus.Authorized));
+        Assert.That(paymentResponse.CardNumberLastFour, Is.EqualTo("5678"));
+        Assert.That(paymentResponse.ExpiryMonth, Is.EqualTo(3));
+        Assert.That(paymentResponse.ExpiryYear, Is.EqualTo(2028));
+        Assert.That(paymentResponse.Currency, Is.EqualTo("EUR"));
+        Assert.That(paymentResponse.Amount, Is.EqualTo(2500));
     }
 
-    [Fact]
+    [Test]
     public async Task GetPayment_WithDeclinedPayment_ReturnsCorrectStatus()
     {
         // Arrange
@@ -596,10 +535,18 @@ public class PaymentsControllerTests
         var paymentsRepository = new PaymentsRepository();
         paymentsRepository.Add(payment);
 
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
+        var webApplicationFactory = new WebApplicationFactory<Program>();
         var client = webApplicationFactory.WithWebHostBuilder(builder =>
-            builder.ConfigureServices(services => ((ServiceCollection)services)
-                .AddSingleton(paymentsRepository)))
+            builder.ConfigureServices(services =>
+            {
+                // Remove existing registration
+                var repositoryDescriptor = services.SingleOrDefault(d => d.ServiceType == typeof(PaymentsRepository));
+                if (repositoryDescriptor != null)
+                    services.Remove(repositoryDescriptor);
+
+                // Add test instance
+                services.AddSingleton(paymentsRepository);
+            }))
             .CreateClient();
 
         // Act
@@ -607,12 +554,12 @@ public class PaymentsControllerTests
         var paymentResponse = await response.Content.ReadFromJsonAsync<GetPaymentResponse>();
 
         // Assert
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.NotNull(paymentResponse);
-        Assert.Equal(PaymentStatus.Declined, paymentResponse.Status);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(paymentResponse, Is.Not.Null);
+        Assert.That(paymentResponse!.Status, Is.EqualTo(PaymentStatus.Declined));
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPayment_ExtractsCorrectLastFourDigits()
     {
         // Arrange
@@ -622,14 +569,7 @@ public class PaymentsControllerTests
 
         var paymentsRepository = new PaymentsRepository();
 
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.WithWebHostBuilder(builder =>
-            builder.ConfigureServices(services =>
-            {
-                ((ServiceCollection)services).AddSingleton(paymentsRepository);
-                ((ServiceCollection)services).AddSingleton(mockBankClient.Object);
-            }))
-            .CreateClient();
+        var client = CreateTestClient(paymentsRepository, mockBankClient);
 
         var request = new PostPaymentRequest
         {
@@ -646,11 +586,11 @@ public class PaymentsControllerTests
         var paymentResponse = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
 
         // Assert
-        Assert.NotNull(paymentResponse);
-        Assert.Equal("0366", paymentResponse.CardNumberLastFour);
+        Assert.That(paymentResponse, Is.Not.Null);
+        Assert.That(paymentResponse.CardNumberLastFour, Is.EqualTo("0366"));
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPayment_WithMinimumAmount_Succeeds()
     {
         // Arrange
@@ -660,14 +600,7 @@ public class PaymentsControllerTests
 
         var paymentsRepository = new PaymentsRepository();
 
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.WithWebHostBuilder(builder =>
-            builder.ConfigureServices(services =>
-            {
-                ((ServiceCollection)services).AddSingleton(paymentsRepository);
-                ((ServiceCollection)services).AddSingleton(mockBankClient.Object);
-            }))
-            .CreateClient();
+        var client = CreateTestClient(paymentsRepository, mockBankClient);
 
         var request = new PostPaymentRequest
         {
@@ -684,12 +617,12 @@ public class PaymentsControllerTests
         var paymentResponse = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
 
         // Assert
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.NotNull(paymentResponse);
-        Assert.Equal(1, paymentResponse.Amount);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(paymentResponse, Is.Not.Null);
+        Assert.That(paymentResponse.Amount, Is.EqualTo(1));
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPayment_WithLargeAmount_Succeeds()
     {
         // Arrange
@@ -699,14 +632,7 @@ public class PaymentsControllerTests
 
         var paymentsRepository = new PaymentsRepository();
 
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.WithWebHostBuilder(builder =>
-            builder.ConfigureServices(services =>
-            {
-                ((ServiceCollection)services).AddSingleton(paymentsRepository);
-                ((ServiceCollection)services).AddSingleton(mockBankClient.Object);
-            }))
-            .CreateClient();
+        var client = CreateTestClient(paymentsRepository, mockBankClient);
 
         var request = new PostPaymentRequest
         {
@@ -723,27 +649,20 @@ public class PaymentsControllerTests
         var paymentResponse = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
 
         // Assert
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.NotNull(paymentResponse);
-        Assert.Equal(999999999, paymentResponse.Amount);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(paymentResponse, Is.Not.Null);
+        Assert.That(paymentResponse.Amount, Is.EqualTo(999999999));
     }
 
     // Rejected Payment Tests - Tests for payment validation failures and rejected status
 
-    [Fact]
+    [Test]
     public async Task ProcessPayment_WithInvalidCardNumber_CreatesRejectedPayment()
     {
         // Arrange
         var mockBankClient = new Mock<IBankClient>();
         var paymentsRepository = new PaymentsRepository();
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.WithWebHostBuilder(builder =>
-            builder.ConfigureServices(services =>
-            {
-                ((ServiceCollection)services).AddSingleton(paymentsRepository);
-                ((ServiceCollection)services).AddSingleton(mockBankClient.Object);
-            }))
-            .CreateClient();
+        var client = CreateTestClient(paymentsRepository, mockBankClient);
 
         var request = new PostPaymentRequest
         {
@@ -760,29 +679,22 @@ public class PaymentsControllerTests
         var content = await response.Content.ReadAsStringAsync();
 
         // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
 
         // Verify payment was stored with Rejected status
-        Assert.Single(paymentsRepository.Payments);
+        Assert.That(paymentsRepository.Payments, Has.Count.EqualTo(1));
         var storedPayment = paymentsRepository.Payments.First();
-        Assert.Equal(PaymentStatus.Rejected, storedPayment.Status);
-        Assert.Equal(string.Empty, storedPayment.CardNumberLastFour); // Too short, returns empty string
+        Assert.That(storedPayment.Status, Is.EqualTo(PaymentStatus.Rejected));
+        Assert.That(storedPayment.CardNumberLastFour, Is.EqualTo(string.Empty)); // Too short, returns empty string
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPayment_WithExpiredCard_CreatesRejectedPayment()
     {
         // Arrange
         var mockBankClient = new Mock<IBankClient>();
         var paymentsRepository = new PaymentsRepository();
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.WithWebHostBuilder(builder =>
-            builder.ConfigureServices(services =>
-            {
-                ((ServiceCollection)services).AddSingleton(paymentsRepository);
-                ((ServiceCollection)services).AddSingleton(mockBankClient.Object);
-            }))
-            .CreateClient();
+        var client = CreateTestClient(paymentsRepository, mockBankClient);
 
         var request = new PostPaymentRequest
         {
@@ -798,31 +710,24 @@ public class PaymentsControllerTests
         var response = await client.PostAsJsonAsync("/api/Payments", request);
 
         // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
 
         // Verify payment was stored with Rejected status
-        Assert.Single(paymentsRepository.Payments);
+        Assert.That(paymentsRepository.Payments, Has.Count.EqualTo(1));
         var storedPayment = paymentsRepository.Payments.First();
-        Assert.Equal(PaymentStatus.Rejected, storedPayment.Status);
-        Assert.Equal("3456", storedPayment.CardNumberLastFour);
-        Assert.Equal(1, storedPayment.ExpiryMonth);
-        Assert.Equal(2020, storedPayment.ExpiryYear);
+        Assert.That(storedPayment.Status, Is.EqualTo(PaymentStatus.Rejected));
+        Assert.That(storedPayment.CardNumberLastFour, Is.EqualTo("3456"));
+        Assert.That(storedPayment.ExpiryMonth, Is.EqualTo(1));
+        Assert.That(storedPayment.ExpiryYear, Is.EqualTo(2020));
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPayment_WithInvalidCurrency_CreatesRejectedPayment()
     {
         // Arrange
         var mockBankClient = new Mock<IBankClient>();
         var paymentsRepository = new PaymentsRepository();
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.WithWebHostBuilder(builder =>
-            builder.ConfigureServices(services =>
-            {
-                ((ServiceCollection)services).AddSingleton(paymentsRepository);
-                ((ServiceCollection)services).AddSingleton(mockBankClient.Object);
-            }))
-            .CreateClient();
+        var client = CreateTestClient(paymentsRepository, mockBankClient);
 
         var request = new PostPaymentRequest
         {
@@ -838,29 +743,22 @@ public class PaymentsControllerTests
         var response = await client.PostAsJsonAsync("/api/Payments", request);
 
         // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
 
         // Verify payment was stored with Rejected status
-        Assert.Single(paymentsRepository.Payments);
+        Assert.That(paymentsRepository.Payments, Has.Count.EqualTo(1));
         var storedPayment = paymentsRepository.Payments.First();
-        Assert.Equal(PaymentStatus.Rejected, storedPayment.Status);
-        Assert.Equal("XXX", storedPayment.Currency);
+        Assert.That(storedPayment.Status, Is.EqualTo(PaymentStatus.Rejected));
+        Assert.That(storedPayment.Currency, Is.EqualTo("XXX"));
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPayment_WithInvalidCvv_CreatesRejectedPayment()
     {
         // Arrange
         var mockBankClient = new Mock<IBankClient>();
         var paymentsRepository = new PaymentsRepository();
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.WithWebHostBuilder(builder =>
-            builder.ConfigureServices(services =>
-            {
-                ((ServiceCollection)services).AddSingleton(paymentsRepository);
-                ((ServiceCollection)services).AddSingleton(mockBankClient.Object);
-            }))
-            .CreateClient();
+        var client = CreateTestClient(paymentsRepository, mockBankClient);
 
         var request = new PostPaymentRequest
         {
@@ -876,28 +774,21 @@ public class PaymentsControllerTests
         var response = await client.PostAsJsonAsync("/api/Payments", request);
 
         // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
 
         // Verify payment was stored with Rejected status
-        Assert.Single(paymentsRepository.Payments);
+        Assert.That(paymentsRepository.Payments, Has.Count.EqualTo(1));
         var storedPayment = paymentsRepository.Payments.First();
-        Assert.Equal(PaymentStatus.Rejected, storedPayment.Status);
+        Assert.That(storedPayment.Status, Is.EqualTo(PaymentStatus.Rejected));
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPayment_WithInvalidAmount_CreatesRejectedPayment()
     {
         // Arrange
         var mockBankClient = new Mock<IBankClient>();
         var paymentsRepository = new PaymentsRepository();
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.WithWebHostBuilder(builder =>
-            builder.ConfigureServices(services =>
-            {
-                ((ServiceCollection)services).AddSingleton(paymentsRepository);
-                ((ServiceCollection)services).AddSingleton(mockBankClient.Object);
-            }))
-            .CreateClient();
+        var client = CreateTestClient(paymentsRepository, mockBankClient);
 
         var request = new PostPaymentRequest
         {
@@ -913,29 +804,22 @@ public class PaymentsControllerTests
         var response = await client.PostAsJsonAsync("/api/Payments", request);
 
         // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
 
         // Verify payment was stored with Rejected status
-        Assert.Single(paymentsRepository.Payments);
+        Assert.That(paymentsRepository.Payments, Has.Count.EqualTo(1));
         var storedPayment = paymentsRepository.Payments.First();
-        Assert.Equal(PaymentStatus.Rejected, storedPayment.Status);
-        Assert.Equal(0, storedPayment.Amount);
+        Assert.That(storedPayment.Status, Is.EqualTo(PaymentStatus.Rejected));
+        Assert.That(storedPayment.Amount, Is.EqualTo(0));
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPayment_WithMultipleValidationErrors_CreatesRejectedPayment()
     {
         // Arrange
         var mockBankClient = new Mock<IBankClient>();
         var paymentsRepository = new PaymentsRepository();
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.WithWebHostBuilder(builder =>
-            builder.ConfigureServices(services =>
-            {
-                ((ServiceCollection)services).AddSingleton(paymentsRepository);
-                ((ServiceCollection)services).AddSingleton(mockBankClient.Object);
-            }))
-            .CreateClient();
+        var client = CreateTestClient(paymentsRepository, mockBankClient);
 
         var request = new PostPaymentRequest
         {
@@ -951,28 +835,21 @@ public class PaymentsControllerTests
         var response = await client.PostAsJsonAsync("/api/Payments", request);
 
         // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
 
         // Verify payment was stored with Rejected status
-        Assert.Single(paymentsRepository.Payments);
+        Assert.That(paymentsRepository.Payments, Has.Count.EqualTo(1));
         var storedPayment = paymentsRepository.Payments.First();
-        Assert.Equal(PaymentStatus.Rejected, storedPayment.Status);
+        Assert.That(storedPayment.Status, Is.EqualTo(PaymentStatus.Rejected));
     }
 
-    [Fact]
+    [Test]
     public async Task RejectedPayment_CanBeRetrievedById()
     {
         // Arrange
         var mockBankClient = new Mock<IBankClient>();
         var paymentsRepository = new PaymentsRepository();
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.WithWebHostBuilder(builder =>
-            builder.ConfigureServices(services =>
-            {
-                ((ServiceCollection)services).AddSingleton(paymentsRepository);
-                ((ServiceCollection)services).AddSingleton(mockBankClient.Object);
-            }))
-            .CreateClient();
+        var client = CreateTestClient(paymentsRepository, mockBankClient);
 
         var request = new PostPaymentRequest
         {
@@ -996,26 +873,19 @@ public class PaymentsControllerTests
         var retrievedPayment = await getResponse.Content.ReadFromJsonAsync<GetPaymentResponse>();
 
         // Assert
-        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
-        Assert.NotNull(retrievedPayment);
-        Assert.Equal(PaymentStatus.Rejected, retrievedPayment.Status);
-        Assert.Equal(paymentId, retrievedPayment.Id);
+        Assert.That(getResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(retrievedPayment, Is.Not.Null);
+        Assert.That(retrievedPayment!.Status, Is.EqualTo(PaymentStatus.Rejected));
+        Assert.That(retrievedPayment.Id, Is.EqualTo(paymentId));
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPayment_WithNullCardNumber_HandlesGracefully()
     {
         // Arrange
         var mockBankClient = new Mock<IBankClient>();
         var paymentsRepository = new PaymentsRepository();
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.WithWebHostBuilder(builder =>
-            builder.ConfigureServices(services =>
-            {
-                ((ServiceCollection)services).AddSingleton(paymentsRepository);
-                ((ServiceCollection)services).AddSingleton(mockBankClient.Object);
-            }))
-            .CreateClient();
+        var client = CreateTestClient(paymentsRepository, mockBankClient);
 
         var request = new PostPaymentRequest
         {
@@ -1031,29 +901,22 @@ public class PaymentsControllerTests
         var response = await client.PostAsJsonAsync("/api/Payments", request);
 
         // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
 
         // Verify payment was stored with Rejected status and default card digits
-        Assert.Single(paymentsRepository.Payments);
+        Assert.That(paymentsRepository.Payments, Has.Count.EqualTo(1));
         var storedPayment = paymentsRepository.Payments.First();
-        Assert.Equal(PaymentStatus.Rejected, storedPayment.Status);
-        Assert.Equal(string.Empty, storedPayment.CardNumberLastFour); // Default value for null/invalid
+        Assert.That(storedPayment.Status, Is.EqualTo(PaymentStatus.Rejected));
+        Assert.That(storedPayment.CardNumberLastFour, Is.EqualTo(string.Empty)); // Default value for null/invalid
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPayment_WithShortCardNumber_ExtractsAvailableDigits()
     {
         // Arrange
         var mockBankClient = new Mock<IBankClient>();
         var paymentsRepository = new PaymentsRepository();
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.WithWebHostBuilder(builder =>
-            builder.ConfigureServices(services =>
-            {
-                ((ServiceCollection)services).AddSingleton(paymentsRepository);
-                ((ServiceCollection)services).AddSingleton(mockBankClient.Object);
-            }))
-            .CreateClient();
+        var client = CreateTestClient(paymentsRepository, mockBankClient);
 
         var request = new PostPaymentRequest
         {
@@ -1069,29 +932,22 @@ public class PaymentsControllerTests
         var response = await client.PostAsJsonAsync("/api/Payments", request);
 
         // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
 
         // Verify payment was stored with Rejected status
-        Assert.Single(paymentsRepository.Payments);
+        Assert.That(paymentsRepository.Payments, Has.Count.EqualTo(1));
         var storedPayment = paymentsRepository.Payments.First();
-        Assert.Equal(PaymentStatus.Rejected, storedPayment.Status);
-        Assert.Equal(string.Empty, storedPayment.CardNumberLastFour); // Too short, returns empty string
+        Assert.That(storedPayment.Status, Is.EqualTo(PaymentStatus.Rejected));
+        Assert.That(storedPayment.CardNumberLastFour, Is.EqualTo(string.Empty)); // Too short, returns empty string
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPayment_WithAlphabeticCardNumber_HandlesGracefully()
     {
         // Arrange
         var mockBankClient = new Mock<IBankClient>();
         var paymentsRepository = new PaymentsRepository();
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.WithWebHostBuilder(builder =>
-            builder.ConfigureServices(services =>
-            {
-                ((ServiceCollection)services).AddSingleton(paymentsRepository);
-                ((ServiceCollection)services).AddSingleton(mockBankClient.Object);
-            }))
-            .CreateClient();
+        var client = CreateTestClient(paymentsRepository, mockBankClient);
 
         var request = new PostPaymentRequest
         {
@@ -1107,29 +963,22 @@ public class PaymentsControllerTests
         var response = await client.PostAsJsonAsync("/api/Payments", request);
 
         // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
 
         // Verify payment was stored with Rejected status
-        Assert.Single(paymentsRepository.Payments);
+        Assert.That(paymentsRepository.Payments, Has.Count.EqualTo(1));
         var storedPayment = paymentsRepository.Payments.First();
-        Assert.Equal(PaymentStatus.Rejected, storedPayment.Status);
-        Assert.Equal("7890", storedPayment.CardNumberLastFour); // Extracts last 4 chars even if invalid
+        Assert.That(storedPayment.Status, Is.EqualTo(PaymentStatus.Rejected));
+        Assert.That(storedPayment.CardNumberLastFour, Is.EqualTo("7890")); // Extracts last 4 chars even if invalid
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPayment_RejectedPayments_DoNotCallBank()
     {
         // Arrange
         var mockBankClient = new Mock<IBankClient>();
         var paymentsRepository = new PaymentsRepository();
-        var webApplicationFactory = new WebApplicationFactory<PaymentsController>();
-        var client = webApplicationFactory.WithWebHostBuilder(builder =>
-            builder.ConfigureServices(services =>
-            {
-                ((ServiceCollection)services).AddSingleton(paymentsRepository);
-                ((ServiceCollection)services).AddSingleton(mockBankClient.Object);
-            }))
-            .CreateClient();
+        var client = CreateTestClient(paymentsRepository, mockBankClient);
 
         var request = new PostPaymentRequest
         {
@@ -1145,11 +994,11 @@ public class PaymentsControllerTests
         var response = await client.PostAsJsonAsync("/api/Payments", request);
 
         // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
 
         // Verify payment exists with Rejected status
         var storedPayment = paymentsRepository.Payments.First();
-        Assert.Equal(PaymentStatus.Rejected, storedPayment.Status);
+        Assert.That(storedPayment.Status, Is.EqualTo(PaymentStatus.Rejected));
 
         // Note: The bank client is not called for rejected payments
         // (validated by the fact that no bank client mock is set up in this test)

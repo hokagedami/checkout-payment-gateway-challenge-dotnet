@@ -9,6 +9,7 @@ using PaymentGateway.Api.Services;
 
 namespace PaymentGateway.Api.Tests.Services;
 
+[TestFixture]
 public class BankClientTests
 {
     private readonly Mock<ILogger<BankClient>> _mockLogger;
@@ -18,7 +19,7 @@ public class BankClientTests
         _mockLogger = new Mock<ILogger<BankClient>>();
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPaymentAsync_WithSuccessfulResponse_ReturnsAuthorizedResponse()
     {
         // Arrange
@@ -64,12 +65,12 @@ public class BankClientTests
         var result = await bankClient.ProcessPaymentAsync(request);
 
         // Assert
-        Assert.NotNull(result);
-        Assert.True(result.Authorized);
-        Assert.Equal("auth-123", result.AuthorizationCode);
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.Authorized, Is.True);
+        Assert.That(result.AuthorizationCode, Is.EqualTo("auth-123"));
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPaymentAsync_WithDeclinedResponse_ReturnsDeclinedResponse()
     {
         // Arrange
@@ -115,12 +116,12 @@ public class BankClientTests
         var result = await bankClient.ProcessPaymentAsync(request);
 
         // Assert
-        Assert.NotNull(result);
-        Assert.False(result.Authorized);
-        Assert.Null(result.AuthorizationCode);
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.Authorized, Is.False);
+        Assert.That(result.AuthorizationCode, Is.Null);
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPaymentAsync_WithBadRequestResponse_ReturnsNull()
     {
         // Arrange
@@ -157,10 +158,10 @@ public class BankClientTests
         var result = await bankClient.ProcessPaymentAsync(request);
 
         // Assert
-        Assert.Null(result);
+        Assert.That(result, Is.Null);
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPaymentAsync_WithServiceUnavailableResponse_ReturnsNull()
     {
         // Arrange
@@ -197,10 +198,10 @@ public class BankClientTests
         var result = await bankClient.ProcessPaymentAsync(request);
 
         // Assert
-        Assert.Null(result);
+        Assert.That(result, Is.Null);
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPaymentAsync_WithException_ReturnsNull()
     {
         // Arrange
@@ -233,10 +234,10 @@ public class BankClientTests
         var result = await bankClient.ProcessPaymentAsync(request);
 
         // Assert
-        Assert.Null(result);
+        Assert.That(result, Is.Null);
     }
 
-    [Fact]
+    [Test]
     public async Task ProcessPaymentAsync_SendsCorrectRequest()
     {
         // Arrange
@@ -284,19 +285,19 @@ public class BankClientTests
         await bankClient.ProcessPaymentAsync(request);
 
         // Assert
-        Assert.NotNull(capturedRequest);
-        Assert.Equal(HttpMethod.Post, capturedRequest.Method);
-        Assert.Equal("/payments", capturedRequest.RequestUri?.PathAndQuery);
+        Assert.That(capturedRequest, Is.Not.Null);
+        Assert.That(capturedRequest.Method, Is.EqualTo(HttpMethod.Post));
+        Assert.That(capturedRequest.RequestUri?.PathAndQuery, Is.EqualTo("/payments"));
 
         var requestContent = await capturedRequest.Content!.ReadAsStringAsync();
         var sentRequest = JsonSerializer.Deserialize<BankPaymentRequest>(requestContent,
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-        Assert.NotNull(sentRequest);
-        Assert.Equal(request.CardNumber, sentRequest.CardNumber);
-        Assert.Equal(request.ExpiryDate, sentRequest.ExpiryDate);
-        Assert.Equal(request.Currency, sentRequest.Currency);
-        Assert.Equal(request.Amount, sentRequest.Amount);
-        Assert.Equal(request.Cvv, sentRequest.Cvv);
+        Assert.That(sentRequest, Is.Not.Null);
+        Assert.That(sentRequest.CardNumber, Is.EqualTo(request.CardNumber));
+        Assert.That(sentRequest.ExpiryDate, Is.EqualTo(request.ExpiryDate));
+        Assert.That(sentRequest.Currency, Is.EqualTo(request.Currency));
+        Assert.That(sentRequest.Amount, Is.EqualTo(request.Amount));
+        Assert.That(sentRequest.Cvv, Is.EqualTo(request.Cvv));
     }
 }
