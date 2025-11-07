@@ -1,17 +1,17 @@
 ﻿using PaymentGateway.Api.Models.Responses;
 
-namespace PaymentGateway.Api.Services;
+namespace PaymentGateway.Api.Repositories;
 
 public class PaymentsRepository
 {
-    public List<PostPaymentResponse> Payments = new();
+    public readonly List<PostPaymentResponse> Payments = [];
     
     public void Add(PostPaymentResponse payment)
     {
         Payments.Add(payment);
     }
 
-    public PostPaymentResponse Get(Guid id)
+    public PostPaymentResponse? Get(Guid id)
     {
         return Payments.FirstOrDefault(p => p.Id == id);
     }
