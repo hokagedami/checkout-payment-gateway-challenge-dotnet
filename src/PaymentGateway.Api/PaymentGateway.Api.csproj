@@ -7,11 +7,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.2.3" />
+    <InternalsVisibleTo Include="PaymentGateway.Api.Tests" />
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Services\" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.2.3" />
   </ItemGroup>
 
 </Project>

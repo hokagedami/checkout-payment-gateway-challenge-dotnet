@@ -2,9 +2,10 @@ using PaymentGateway.Api.Helpers;
 
 namespace PaymentGateway.Api.Tests.Helpers;
 
+[TestFixture]
 public class CardNumberExtensionsTests
 {
-    [Fact]
+    [Test]
     public void ExtractLastFourDigits_WithValidCardNumber_ReturnsLastFourDigits()
     {
         // Arrange
@@ -14,25 +15,24 @@ public class CardNumberExtensionsTests
         var result = cardNumber.ExtractLastFourDigits();
 
         // Assert
-        Assert.Equal("3456", result);
+        Assert.That(result, Is.EqualTo("3456"));
     }
 
-    [Theory]
-    [InlineData("4532015112830366", "0366")]
-    [InlineData("5425233430109903", "9903")]
-    [InlineData("2222405343248877", "8877")]
-    [InlineData("12345678901234", "1234")]
-    [InlineData("1234567890123456789", "6789")]
+    [TestCase("4532015112830366", "0366")]
+    [TestCase("5425233430109903", "9903")]
+    [TestCase("2222405343248877", "8877")]
+    [TestCase("12345678901234", "1234")]
+    [TestCase("1234567890123456789", "6789")]
     public void ExtractLastFourDigits_WithVariousValidCardNumbers_ReturnsCorrectDigits(string cardNumber, string expected)
     {
         // Act
         var result = cardNumber.ExtractLastFourDigits();
 
         // Assert
-        Assert.Equal(expected, result);
+        Assert.That(result, Is.EqualTo(expected));
     }
 
-    [Fact]
+    [Test]
     public void ExtractLastFourDigits_WithNullCardNumber_ReturnsEmptyString()
     {
         // Arrange
@@ -42,10 +42,10 @@ public class CardNumberExtensionsTests
         var result = cardNumber.ExtractLastFourDigits();
 
         // Assert
-        Assert.Equal(string.Empty, result);
+        Assert.That(result, Is.EqualTo(string.Empty));
     }
 
-    [Fact]
+    [Test]
     public void ExtractLastFourDigits_WithEmptyString_ReturnsEmptyString()
     {
         // Arrange
@@ -55,10 +55,10 @@ public class CardNumberExtensionsTests
         var result = cardNumber.ExtractLastFourDigits();
 
         // Assert
-        Assert.Equal(string.Empty, result);
+        Assert.That(result, Is.EqualTo(string.Empty));
     }
 
-    [Fact]
+    [Test]
     public void ExtractLastFourDigits_WithWhitespace_ReturnsEmptyString()
     {
         // Arrange
@@ -68,23 +68,22 @@ public class CardNumberExtensionsTests
         var result = cardNumber.ExtractLastFourDigits();
 
         // Assert
-        Assert.Equal(string.Empty, result);
+        Assert.That(result, Is.EqualTo(string.Empty));
     }
 
-    [Theory]
-    [InlineData("1")]
-    [InlineData("12")]
-    [InlineData("123")]
+    [TestCase("1")]
+    [TestCase("12")]
+    [TestCase("123")]
     public void ExtractLastFourDigits_WithLessThanFourCharacters_ReturnsEmptyString(string cardNumber)
     {
         // Act
         var result = cardNumber.ExtractLastFourDigits();
 
         // Assert
-        Assert.Equal(string.Empty, result);
+        Assert.That(result, Is.EqualTo(string.Empty));
     }
 
-    [Fact]
+    [Test]
     public void ExtractLastFourDigits_WithExactlyFourDigits_ReturnsThoseDigits()
     {
         // Arrange
@@ -94,24 +93,23 @@ public class CardNumberExtensionsTests
         var result = cardNumber.ExtractLastFourDigits();
 
         // Assert
-        Assert.Equal("1234", result);
+        Assert.That(result, Is.EqualTo("1234"));
     }
 
-    [Theory]
-    [InlineData("123456789012abcd")]
-    [InlineData("12345678901234ab")]
-    [InlineData("abcd1234567890ab")]
-    [InlineData("1234567890123xyz")]
+    [TestCase("123456789012abcd")]
+    [TestCase("12345678901234ab")]
+    [TestCase("abcd1234567890ab")]
+    [TestCase("1234567890123xyz")]
     public void ExtractLastFourDigits_WithNonNumericLastFourCharacters_ReturnsEmptyString(string cardNumber)
     {
         // Act
         var result = cardNumber.ExtractLastFourDigits();
 
         // Assert
-        Assert.Equal(string.Empty, result);
+        Assert.That(result, Is.EqualTo(string.Empty));
     }
 
-    [Fact]
+    [Test]
     public void ExtractLastFourDigits_WithLeadingZeros_PreservesZeros()
     {
         // Arrange
@@ -121,10 +119,10 @@ public class CardNumberExtensionsTests
         var result = cardNumber.ExtractLastFourDigits();
 
         // Assert
-        Assert.Equal("0001", result); // Now preserves leading zeros
+        Assert.That(result, Is.EqualTo("0001")); // Now preserves leading zeros
     }
 
-    [Fact]
+    [Test]
     public void ExtractLastFourDigits_WithAllZeros_ReturnsZeroString()
     {
         // Arrange
@@ -134,22 +132,21 @@ public class CardNumberExtensionsTests
         var result = cardNumber.ExtractLastFourDigits();
 
         // Assert
-        Assert.Equal("0000", result);
+        Assert.That(result, Is.EqualTo("0000"));
     }
 
-    [Theory]
-    [InlineData("1234-5678-9012-3456", "3456")]
-    [InlineData("1234 5678 9012 3456", "3456")]
+    [TestCase("1234-5678-9012-3456", "3456")]
+    [TestCase("1234 5678 9012 3456", "3456")]
     public void ExtractLastFourDigits_WithFormattedCardNumber_ExtractsLastFourCharacters(string cardNumber, string expected)
     {
         // Act
         var result = cardNumber.ExtractLastFourDigits();
 
         // Assert
-        Assert.Equal(expected, result);
+        Assert.That(result, Is.EqualTo(expected));
     }
 
-    [Fact]
+    [Test]
     public void ExtractLastFourDigits_WithVeryLongCardNumber_ExtractsOnlyLastFour()
     {
         // Arrange
@@ -159,6 +156,6 @@ public class CardNumberExtensionsTests
         var result = cardNumber.ExtractLastFourDigits();
 
         // Assert
-        Assert.Equal("7890", result);
+        Assert.That(result, Is.EqualTo("7890"));
     }
 }

@@ -1,12 +1,14 @@
+using PaymentGateway.Api.Enums;
 using PaymentGateway.Api.Models;
 using PaymentGateway.Api.Models.Responses;
 using PaymentGateway.Api.Repositories;
 
 namespace PaymentGateway.Api.Tests.Repositories;
 
+[TestFixture]
 public class PaymentsRepositoryTests
 {
-    [Fact]
+    [Test]
     public void Add_StoresPaymentSuccessfully()
     {
         // Arrange
@@ -27,13 +29,13 @@ public class PaymentsRepositoryTests
 
         // Assert
         var retrieved = repository.Get(payment.Id);
-        Assert.NotNull(retrieved);
-        Assert.Equal(payment.Id, retrieved.Id);
-        Assert.Equal(payment.Status, retrieved.Status);
-        Assert.Equal(payment.CardNumberLastFour, retrieved.CardNumberLastFour);
+        Assert.That(retrieved, Is.Not.Null);
+        Assert.That(retrieved.Id, Is.EqualTo(payment.Id));
+        Assert.That(retrieved.Status, Is.EqualTo(payment.Status));
+        Assert.That(retrieved.CardNumberLastFour, Is.EqualTo(payment.CardNumberLastFour));
     }
 
-    [Fact]
+    [Test]
     public void Get_WithValidId_ReturnsPayment()
     {
         // Arrange
@@ -56,17 +58,17 @@ public class PaymentsRepositoryTests
         var result = repository.Get(paymentId);
 
         // Assert
-        Assert.NotNull(result);
-        Assert.Equal(paymentId, result.Id);
-        Assert.Equal(PaymentStatus.Declined, result.Status);
-        Assert.Equal("5678", result.CardNumberLastFour);
-        Assert.Equal(6, result.ExpiryMonth);
-        Assert.Equal(2027, result.ExpiryYear);
-        Assert.Equal("USD", result.Currency);
-        Assert.Equal(2500, result.Amount);
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.Id, Is.EqualTo(paymentId));
+        Assert.That(result.Status, Is.EqualTo(PaymentStatus.Declined));
+        Assert.That(result.CardNumberLastFour, Is.EqualTo("5678"));
+        Assert.That(result.ExpiryMonth, Is.EqualTo(6));
+        Assert.That(result.ExpiryYear, Is.EqualTo(2027));
+        Assert.That(result.Currency, Is.EqualTo("USD"));
+        Assert.That(result.Amount, Is.EqualTo(2500));
     }
 
-    [Fact]
+    [Test]
     public void Get_WithInvalidId_ReturnsNull()
     {
         // Arrange
@@ -77,10 +79,10 @@ public class PaymentsRepositoryTests
         var result = repository.Get(nonExistentId);
 
         // Assert
-        Assert.Null(result);
+        Assert.That(result, Is.Null);
     }
 
-    [Fact]
+    [Test]
     public void Add_MultiplePayments_AllAreStored()
     {
         // Arrange
@@ -128,16 +130,16 @@ public class PaymentsRepositoryTests
         var retrieved2 = repository.Get(payment2.Id);
         var retrieved3 = repository.Get(payment3.Id);
 
-        Assert.NotNull(retrieved1);
-        Assert.NotNull(retrieved2);
-        Assert.NotNull(retrieved3);
+        Assert.That(retrieved1, Is.Not.Null);
+        Assert.That(retrieved2, Is.Not.Null);
+        Assert.That(retrieved3, Is.Not.Null);
 
-        Assert.Equal(payment1.Id, retrieved1.Id);
-        Assert.Equal(payment2.Id, retrieved2.Id);
-        Assert.Equal(payment3.Id, retrieved3.Id);
+        Assert.That(retrieved1.Id, Is.EqualTo(payment1.Id));
+        Assert.That(retrieved2.Id, Is.EqualTo(payment2.Id));
+        Assert.That(retrieved3.Id, Is.EqualTo(payment3.Id));
     }
 
-    [Fact]
+    [Test]
     public void Get_AfterMultipleAdds_ReturnsCorrectPayment()
     {
         // Arrange
@@ -185,23 +187,23 @@ public class PaymentsRepositoryTests
         var result = repository.Get(targetId);
 
         // Assert
-        Assert.NotNull(result);
-        Assert.Equal(targetId, result.Id);
-        Assert.Equal("9999", result.CardNumberLastFour);
-        Assert.Equal(PaymentStatus.Declined, result.Status);
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.Id, Is.EqualTo(targetId));
+        Assert.That(result.CardNumberLastFour, Is.EqualTo("9999"));
+        Assert.That(result.Status, Is.EqualTo(PaymentStatus.Declined));
     }
 
-    [Fact]
+    [Test]
     public void Payments_IsInitiallyEmpty()
     {
         // Arrange & Act
         var repository = new PaymentsRepository();
 
         // Assert
-        Assert.Empty(repository.Payments);
+        Assert.That(repository.Payments, Is.Empty);
     }
 
-    [Fact]
+    [Test]
     public void Add_IncrementsPaymentCount()
     {
         // Arrange
@@ -231,6 +233,6 @@ public class PaymentsRepositoryTests
         });
 
         // Assert
-        Assert.Equal(2, repository.Payments.Count);
+        Assert.That(repository.Payments.Count, Is.EqualTo(2));
     }
 }

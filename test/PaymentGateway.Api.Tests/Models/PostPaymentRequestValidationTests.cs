@@ -4,9 +4,10 @@ using PaymentGateway.Api.Models.Requests;
 
 namespace PaymentGateway.Api.Tests.Models;
 
+[TestFixture]
 public class PostPaymentRequestValidationTests
 {
-    [Fact]
+    [Test]
     public void Validate_WithValidRequest_ReturnsSuccess()
     {
         // Arrange
@@ -27,14 +28,13 @@ public class PostPaymentRequestValidationTests
         var isValid = Validator.TryValidateObject(request, context, results, true);
 
         // Assert
-        Assert.True(isValid);
-        Assert.Empty(results);
+        Assert.That(isValid, Is.True);
+        Assert.That(results, Is.Empty);
     }
 
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("   ")]
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("   ")]
     public void Validate_WithMissingCardNumber_ReturnsError(string? cardNumber)
     {
         // Arrange
@@ -55,17 +55,16 @@ public class PostPaymentRequestValidationTests
         var isValid = Validator.TryValidateObject(request, context, results, true);
 
         // Assert
-        Assert.False(isValid);
-        Assert.Contains(results, r => r.MemberNames.Contains("CardNumber"));
+        Assert.That(isValid, Is.False);
+        Assert.That(results, Does.Contain(results.FirstOrDefault(r => r.MemberNames.Contains("CardNumber"))));
     }
 
-    [Theory]
-    [InlineData("123")]
-    [InlineData("12345678901")]
-    [InlineData("12345678901234567890")]
-    [InlineData("abcd1234567890")]
-    [InlineData("1234 5678 9012 3456")]
-    [InlineData("1234-5678-9012-3456")]
+    [TestCase("123")]
+    [TestCase("12345678901")]
+    [TestCase("12345678901234567890")]
+    [TestCase("abcd1234567890")]
+    [TestCase("1234 5678 9012 3456")]
+    [TestCase("1234-5678-9012-3456")]
     public void Validate_WithInvalidCardNumber_ReturnsError(string cardNumber)
     {
         // Arrange
@@ -86,17 +85,16 @@ public class PostPaymentRequestValidationTests
         var isValid = Validator.TryValidateObject(request, context, results, true);
 
         // Assert
-        Assert.False(isValid);
-        Assert.Contains(results, r => r.MemberNames.Contains("CardNumber"));
+        Assert.That(isValid, Is.False);
+        Assert.That(results, Does.Contain(results.FirstOrDefault(r => r.MemberNames.Contains("CardNumber"))));
     }
 
-    [Theory]
-    [InlineData("12345678901234")]
-    [InlineData("123456789012345")]
-    [InlineData("1234567890123456")]
-    [InlineData("12345678901234567")]
-    [InlineData("123456789012345678")]
-    [InlineData("1234567890123456789")]
+    [TestCase("12345678901234")]
+    [TestCase("123456789012345")]
+    [TestCase("1234567890123456")]
+    [TestCase("12345678901234567")]
+    [TestCase("123456789012345678")]
+    [TestCase("1234567890123456789")]
     public void Validate_WithValidCardNumberLengths_ReturnsSuccess(string cardNumber)
     {
         // Arrange
@@ -117,14 +115,13 @@ public class PostPaymentRequestValidationTests
         var isValid = Validator.TryValidateObject(request, context, results, true);
 
         // Assert
-        Assert.True(isValid);
+        Assert.That(isValid, Is.True);
     }
 
-    [Theory]
-    [InlineData(0)]
-    [InlineData(-1)]
-    [InlineData(13)]
-    [InlineData(100)]
+    [TestCase(0)]
+    [TestCase(-1)]
+    [TestCase(13)]
+    [TestCase(100)]
     public void Validate_WithInvalidExpiryMonth_ReturnsError(int month)
     {
         // Arrange
@@ -145,14 +142,13 @@ public class PostPaymentRequestValidationTests
         var isValid = Validator.TryValidateObject(request, context, results, true);
 
         // Assert
-        Assert.False(isValid);
-        Assert.Contains(results, r => r.MemberNames.Contains("ExpiryMonth"));
+        Assert.That(isValid, Is.False);
+        Assert.That(results, Does.Contain(results.FirstOrDefault(r => r.MemberNames.Contains("ExpiryMonth"))));
     }
 
-    [Theory]
-    [InlineData(1)]
-    [InlineData(6)]
-    [InlineData(12)]
+    [TestCase(1)]
+    [TestCase(6)]
+    [TestCase(12)]
     public void Validate_WithValidExpiryMonth_ReturnsSuccess(int month)
     {
         // Arrange
@@ -173,13 +169,12 @@ public class PostPaymentRequestValidationTests
         var isValid = Validator.TryValidateObject(request, context, results, true);
 
         // Assert
-        Assert.True(isValid);
+        Assert.That(isValid, Is.True);
     }
 
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("   ")]
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("   ")]
     public void Validate_WithMissingCurrency_ReturnsError(string? currency)
     {
         // Arrange
@@ -200,18 +195,17 @@ public class PostPaymentRequestValidationTests
         var isValid = Validator.TryValidateObject(request, context, results, true);
 
         // Assert
-        Assert.False(isValid);
-        Assert.Contains(results, r => r.MemberNames.Contains("Currency"));
+        Assert.That(isValid, Is.False);
+        Assert.That(results, Does.Contain(results.FirstOrDefault(r => r.MemberNames.Contains("Currency"))));
     }
 
-    [Theory]
-    [InlineData("US")]
-    [InlineData("GBPP")]
-    [InlineData("E")]
-    [InlineData("EURO")]
-    [InlineData("XXX")]
-    [InlineData("JPY")]
-    [InlineData("123")]
+    [TestCase("US")]
+    [TestCase("GBPP")]
+    [TestCase("E")]
+    [TestCase("EURO")]
+    [TestCase("XXX")]
+    [TestCase("JPY")]
+    [TestCase("123")]
     public void Validate_WithInvalidCurrency_ReturnsError(string currency)
     {
         // Arrange
@@ -232,14 +226,13 @@ public class PostPaymentRequestValidationTests
         var isValid = Validator.TryValidateObject(request, context, results, true);
 
         // Assert
-        Assert.False(isValid);
-        Assert.Contains(results, r => r.MemberNames.Contains("Currency"));
+        Assert.That(isValid, Is.False);
+        Assert.That(results, Does.Contain(results.FirstOrDefault(r => r.MemberNames.Contains("Currency"))));
     }
 
-    [Theory]
-    [InlineData("USD")]
-    [InlineData("GBP")]
-    [InlineData("EUR")]
+    [TestCase("USD")]
+    [TestCase("GBP")]
+    [TestCase("EUR")]
     public void Validate_WithValidCurrency_ReturnsSuccess(string currency)
     {
         // Arrange
@@ -260,13 +253,12 @@ public class PostPaymentRequestValidationTests
         var isValid = Validator.TryValidateObject(request, context, results, true);
 
         // Assert
-        Assert.True(isValid);
+        Assert.That(isValid, Is.True);
     }
 
-    [Theory]
-    [InlineData(0)]
-    [InlineData(-1)]
-    [InlineData(-100)]
+    [TestCase(0)]
+    [TestCase(-1)]
+    [TestCase(-100)]
     public void Validate_WithInvalidAmount_ReturnsError(int amount)
     {
         // Arrange
@@ -287,16 +279,15 @@ public class PostPaymentRequestValidationTests
         var isValid = Validator.TryValidateObject(request, context, results, true);
 
         // Assert
-        Assert.False(isValid);
-        Assert.Contains(results, r => r.MemberNames.Contains("Amount"));
+        Assert.That(isValid, Is.False);
+        Assert.That(results, Does.Contain(results.FirstOrDefault(r => r.MemberNames.Contains("Amount"))));
     }
 
-    [Theory]
-    [InlineData(1)]
-    [InlineData(100)]
-    [InlineData(1050)]
-    [InlineData(999999)]
-    [InlineData(int.MaxValue)]
+    [TestCase(1)]
+    [TestCase(100)]
+    [TestCase(1050)]
+    [TestCase(999999)]
+    [TestCase(int.MaxValue)]
     public void Validate_WithValidAmount_ReturnsSuccess(int amount)
     {
         // Arrange
@@ -317,13 +308,12 @@ public class PostPaymentRequestValidationTests
         var isValid = Validator.TryValidateObject(request, context, results, true);
 
         // Assert
-        Assert.True(isValid);
+        Assert.That(isValid, Is.True);
     }
 
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("   ")]
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("   ")]
     public void Validate_WithMissingCvv_ReturnsError(string? cvv)
     {
         // Arrange
@@ -344,16 +334,15 @@ public class PostPaymentRequestValidationTests
         var isValid = Validator.TryValidateObject(request, context, results, true);
 
         // Assert
-        Assert.False(isValid);
-        Assert.Contains(results, r => r.MemberNames.Contains("Cvv"));
+        Assert.That(isValid, Is.False);
+        Assert.That(results, Does.Contain(results.FirstOrDefault(r => r.MemberNames.Contains("Cvv"))));
     }
 
-    [Theory]
-    [InlineData("12")]
-    [InlineData("12345")]
-    [InlineData("1")]
-    [InlineData("abc")]
-    [InlineData("12a")]
+    [TestCase("12")]
+    [TestCase("12345")]
+    [TestCase("1")]
+    [TestCase("abc")]
+    [TestCase("12a")]
     public void Validate_WithInvalidCvv_ReturnsError(string cvv)
     {
         // Arrange
@@ -374,16 +363,15 @@ public class PostPaymentRequestValidationTests
         var isValid = Validator.TryValidateObject(request, context, results, true);
 
         // Assert
-        Assert.False(isValid);
-        Assert.Contains(results, r => r.MemberNames.Contains("Cvv"));
+        Assert.That(isValid, Is.False);
+        Assert.That(results, Does.Contain(results.FirstOrDefault(r => r.MemberNames.Contains("Cvv"))));
     }
 
-    [Theory]
-    [InlineData("123")]
-    [InlineData("456")]
-    [InlineData("999")]
-    [InlineData("0000")]
-    [InlineData("1234")]
+    [TestCase("123")]
+    [TestCase("456")]
+    [TestCase("999")]
+    [TestCase("0000")]
+    [TestCase("1234")]
     public void Validate_WithValidCvv_ReturnsSuccess(string cvv)
     {
         // Arrange
@@ -404,10 +392,10 @@ public class PostPaymentRequestValidationTests
         var isValid = Validator.TryValidateObject(request, context, results, true);
 
         // Assert
-        Assert.True(isValid);
+        Assert.That(isValid, Is.True);
     }
 
-    [Fact]
+    [Test]
     public void Validate_WithAllInvalidFields_ReturnsMultipleErrors()
     {
         // Arrange
@@ -428,7 +416,7 @@ public class PostPaymentRequestValidationTests
         var isValid = Validator.TryValidateObject(request, context, results, true);
 
         // Assert
-        Assert.False(isValid);
-        Assert.True(results.Count >= 5); // At least 5 validation errors
+        Assert.That(isValid, Is.False);
+        Assert.That(results.Count >= 5, Is.True); // At least 5 validation errors
     }
 }
