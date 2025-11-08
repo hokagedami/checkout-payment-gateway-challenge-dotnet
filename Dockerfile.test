@@ -1,0 +1,23 @@
+# Test runner Dockerfile
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS test
+WORKDIR /src
+
+# Copy solution and project files
+COPY ["PaymentGateway.sln", "./"]
+COPY ["src/PaymentGateway.Api/PaymentGateway.Api.csproj", "src/PaymentGateway.Api/"]
+COPY ["test/PaymentGateway.Api.Tests/PaymentGateway.Api.Tests.csproj", "test/PaymentGateway.Api.Tests/"]
+
+# Restore dependencies
+RUN dotnet restore "PaymentGateway.sln"
+
+# Copy all source files
+COPY . .
+
+# Build the solution
+RUN dotnet build "PaymentGateway.sln" -c Release --no-restore
+
+# Set working directory to test project
+WORKDIR /src/test/PaymentGateway.Api.Tests
+
+# Default command runs E2E tests
+CMD ["dotnet", "test", "--no-build", "--filter", "Category=E2E", "--logger", "console;verbosity=detailed"]
