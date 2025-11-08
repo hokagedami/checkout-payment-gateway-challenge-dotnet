@@ -1,4 +1,4 @@
-# Payment Gateway API
+# Payment Gateway Challenge - .NET Implementation
 
 A production-ready payment gateway API built with ASP.NET Core 8.0, implementing secure payment processing with comprehensive validation, audit trails, and robust error handling.
 
@@ -33,12 +33,14 @@ This Payment Gateway API allows merchants to process payments by integrating wit
 - No sensitive data in logs
 
 ### Quality Assurance
-- **147 comprehensive tests** (100% passing)
+- **158 comprehensive tests** (100% passing)
   - 99 unit tests
   - 48 integration tests
+  - 11 end-to-end tests
 - NUnit test framework with [SetUp]/[TearDown] lifecycle
 - Test-Driven Development (TDD) approach
 - Full code coverage
+- Docker-based E2E testing
 
 ## Quick Start
 
@@ -66,15 +68,17 @@ The API will be available at `https://localhost:5001` (or check console output)
 ### 3. Run Tests
 
 ```bash
-# Run all tests
-dotnet test
-
-# Run only unit/integration tests (exclude E2E)
+# Run all tests (unit + integration, excludes E2E)
 dotnet test --filter "Category!=E2E"
+
+# Run E2E tests (requires Docker)
+docker-compose -f docker-compose.test.yml up --abort-on-container-exit
 
 # Run with detailed output
 dotnet test --logger "console;verbosity=detailed"
 ```
+
+**Note**: E2E tests require Docker and services to be running. See [E2E-TESTING.md](./E2E-TESTING.md) for details.
 
 ### 4. Access Swagger UI
 
@@ -226,6 +230,7 @@ Examples:
 - **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Technical architecture and design decisions
 - **[TESTING.md](./TESTING.md)** - Comprehensive testing guide and TDD approach
 - **[API.md](./API.md)** - Detailed API reference with examples
+- **[E2E-TESTING.md](./E2E-TESTING.md)** - End-to-end testing guide with Docker
 
 ## Technology Stack
 

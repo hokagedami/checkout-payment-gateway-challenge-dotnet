@@ -1,0 +1,62 @@
+version: "3.8"
+
+services:
+  # Bank simulator (mock bank API)
+  bank_simulator:
+    container_name: bank_simulator_test
+    image: bbyars/mountebank:2.8.1
+    ports:
+      - "2525:2525"
+      - "8080:8080"
+    command: --configfile /imposters/bank_simulator.ejs --allowInjection
+    volumes:
+      - type: bind
+        source: ./imposters
+        target: /imposters
+    networks:
+      - test-network
+
+  # Payment Gateway API
+  payment_gateway:
+    container_name: payment_gateway_test
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5000
+      - BankApiUrl=http://bank_simulator:8080
+    depends_on:
+      - bank_simulator
+    networks:
+      - test-network
+
+  # E2E Test Runner
+  test_runner:
+    container_name: test_runner
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    environment:
+      - PAYMENT_GATEWAY_URL=http://payment_gateway:5000
+    depends_on:
+      - payment_gateway
+    networks:
+      - test-network
+    volumes:
+      - type: bind
+        source: ${TEST_RESULTS_DIR:-./test-results}
+        target: /test-results
+    command: >
+      sh -c "
+        echo 'Waiting for services to be ready...' &&
+        sleep 15 &&
+        echo 'Running E2E tests...' &&
+        dotnet test --filter 'Category=E2E' --logger 'trx;LogFileName=/test-results/e2e-results.trx' --logger 'html;LogFileName=/test-results/e2e-results.html' --logger 'console;verbosity=detailed' --results-directory /test-results
+      "
+
+networks:
+  test-network:
+    driver: bridge

@@ -11,14 +11,15 @@
 
 ## Overview
 
-The Payment Gateway API has **147 comprehensive tests** achieving full code coverage across all components. The test suite is built using **NUnit 4.0** with **Moq** for mocking dependencies.
+The Payment Gateway API has **158 comprehensive tests** achieving full code coverage across all components. The test suite is built using **NUnit 4.0** with **Moq** for mocking dependencies.
 
 ### Test Statistics
 
 ```
-Total Tests:     147
+Total Tests:     158
 Unit Tests:      99
 Integration:     48
+E2E Tests:       11
 Pass Rate:       100%
 Framework:       NUnit 4.0
 Mocking:         Moq 4.20
@@ -34,6 +35,7 @@ Mocking:         Moq 4.20
 | PaymentsRepository | 7 | Unit | 100% |
 | BankClient | 6 | Unit | 100% |
 | PaymentsController | 48 | Integration | 100% |
+| Payment Gateway E2E | 11 | E2E | 100% |
 
 ## Test Strategy
 
@@ -42,7 +44,7 @@ Mocking:         Moq 4.20
 ```
       /\
      /  \
-    / E2E\      ← 0 tests (infrastructure ready)
+    / E2E\      ← 11 tests (full system)
    /______\
   /        \
  /Integration\  ← 48 tests (API endpoints)
@@ -106,6 +108,44 @@ public async Task ProcessPayment_WithValidRequest_ReturnsAuthorized()
 }
 ```
 
+### End-to-End Tests
+**Focus**: Complete system testing with real services
+
+**Characteristics**:
+- Tests against running API and Bank Simulator
+- No mocks - uses actual HTTP communication
+- Runs in Docker containers
+- Validates complete workflows
+- Tests real-world scenarios
+
+**Example**:
+```csharp
+[Test]
+[Category("E2E")]
+public async Task PostPayment_WithValidCard_ReturnsAuthorized()
+{
+    // Arrange
+    var client = new HttpClient { BaseAddress = new Uri("http://localhost:5000") };
+    var request = new PostPaymentRequest
+    {
+        CardNumber = "2222405343248877",
+        ExpiryMonth = 4,
+        ExpiryYear = 2026,
+        Currency = "GBP",
+        Amount = 100,
+        Cvv = "123"
+    };
+
+    // Act
+    var response = await client.PostAsJsonAsync("/api/Payments", request);
+    var payment = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
+
+    // Assert
+    Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+    Assert.That(payment.Status, Is.EqualTo(PaymentStatus.Authorized));
+}
+```
+
 ## Test Structure
 
 ### Test Organization
@@ -114,6 +154,8 @@ public async Task ProcessPayment_WithValidRequest_ReturnsAuthorized()
 test/PaymentGateway.Api.Tests/
 ├── Controllers/
 │   └── PaymentsControllerTests.cs          # 48 integration tests
+├── E2E/
+│   └── PaymentGatewayE2ETests.cs           # 11 E2E tests
 ├── Helpers/
 │   └── CardNumberExtensionsTests.cs        # 22 unit tests
 ├── Validation/
@@ -177,10 +219,9 @@ dotnet test --filter "FullyQualifiedName~PaymentsControllerTests"
 # Run specific test
 dotnet test --filter "FullyQualifiedName~ProcessPayment_WithValidRequest"
 
-# Run tests by category (when E2E tests added)
-dotnet test --filter "Category=Unit"
-dotnet test --filter "Category=Integration"
-dotnet test --filter "Category!=E2E"  # Exclude E2E
+# Run tests by category
+dotnet test --filter "Category=E2E"      # E2E only
+dotnet test --filter "Category!=E2E"     # Exclude E2E (unit + integration)
 
 # Generate coverage report (with coverlet)
 dotnet test /p:CollectCoverage=true /p:CoverletOutputFormat=opencover
@@ -204,7 +245,56 @@ Tests automatically run when files change.
 
 ## Test Categories
 
-### 1. CardNumberExtensions Tests (22 tests)
+### 1. End-to-End Tests (11 tests)
+
+**File**: `E2E/PaymentGatewayE2ETests.cs`
+
+**Coverage**:
+- Health check endpoint
+- Authorized payment processing
+- Declined payment processing
+- Rejected payments (invalid card, expired card)
+- Payment retrieval (success and not found)
+- Multiple currencies support
+- Leading zero preservation
+- Complete payment workflows
+
+**Running E2E Tests**:
+```bash
+# Using Docker (recommended)
+docker-compose -f docker-compose.test.yml up --abort-on-container-exit
+
+# Local (requires services running)
+dotnet test --filter "Category=E2E"
+```
+
+**Example Test**:
+```csharp
+[Test]
+[Category("E2E")]
+public async Task E2E_CompletePaymentFlow_AuthorizedDeclinedRejected()
+{
+    // 1. Authorized payment
+    var authResponse = await _client.PostAsJsonAsync("/api/Payments", authorizedRequest);
+    Assert.That(authResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+
+    // 2. Declined payment
+    var decResponse = await _client.PostAsJsonAsync("/api/Payments", declinedRequest);
+    Assert.That(decResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+
+    // 3. Rejected payment
+    var rejResponse = await _client.PostAsJsonAsync("/api/Payments", rejectedRequest);
+    Assert.That(rejResponse.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+
+    // 4. Verify retrievals
+    var authGetResponse = await _client.GetAsync($"/api/Payments/{authPayment.Id}");
+    Assert.That(authGetResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+}
+```
+
+**Note**: E2E tests require Docker and running services. See [E2E-README.md](./E2E-README.md) for detailed setup instructions.
+
+### 2. CardNumberExtensions Tests (22 tests)
 
 **File**: `Helpers/CardNumberExtensionsTests.cs`
 
@@ -228,7 +318,7 @@ public void ExtractLastFourDigits_WithValidLength_ReturnsLastFour(string cardNum
 }
 ```
 
-### 2. FutureExpiryDate Validation Tests (11 tests)
+### 3. FutureExpiryDate Validation Tests (11 tests)
 
 **File**: `Validation/FutureExpiryDateAttributeTests.cs`
 
@@ -253,7 +343,7 @@ public void Validate_WithFutureDate_ReturnsSuccess()
 }
 ```
 
-### 3. Request Validation Tests (53 tests)
+### 4. Request Validation Tests (53 tests)
 
 **File**: `Models/PostPaymentRequestValidationTests.cs`
 
@@ -281,7 +371,7 @@ public void Validate_WithValidCurrency_ReturnsSuccess(string currency)
 }
 ```
 
-### 4. Repository Tests (7 tests)
+### 5. Repository Tests (7 tests)
 
 **File**: `Repositories/PaymentsRepositoryTests.cs`
 
@@ -306,7 +396,7 @@ public void Get_WithInvalidId_ReturnsNull()
 }
 ```
 
-### 5. BankClient Tests (6 tests)
+### 6. BankClient Tests (6 tests)
 
 **File**: `Services/BankClientTests.cs`
 
@@ -336,7 +426,7 @@ public async Task ProcessPaymentAsync_WithException_ReturnsNull()
 }
 ```
 
-### 6. Controller Integration Tests (48 tests)
+### 7. Controller Integration Tests (48 tests)
 
 **File**: `Controllers/PaymentsControllerTests.cs`
 
@@ -620,11 +710,15 @@ fi
 
 | Metric | Value | Target |
 |--------|-------|--------|
-| Test Count | 147 | 100+ |
+| Test Count | 158 | 100+ |
+| Unit Tests | 99 | - |
+| Integration Tests | 48 | - |
+| E2E Tests | 11 | - |
 | Pass Rate | 100% | 100% |
 | Code Coverage | ~100% | >90% |
-| Avg Test Time | <10ms | <100ms |
-| Total Test Time | ~1s | <5s |
+| Avg Test Time (Unit/Integration) | <10ms | <100ms |
+| Total Test Time (Unit/Integration) | ~2s | <5s |
+| E2E Test Time (Docker) | ~30-45s | <60s |
 
 ### Quality Indicators
 
