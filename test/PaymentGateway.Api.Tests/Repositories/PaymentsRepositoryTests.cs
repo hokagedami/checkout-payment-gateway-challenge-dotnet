@@ -235,4 +235,140 @@ public class PaymentsRepositoryTests
         // Assert
         Assert.That(repository.Payments.Count, Is.EqualTo(2));
     }
+
+    [Test]
+    public void GetByIdempotencyKey_WithValidKey_ReturnsPayment()
+    {
+        // Arrange
+        var repository = new PaymentsRepository();
+        var idempotencyKey = "test-key-123";
+        var payment = new PostPaymentResponse
+        {
+            Id = Guid.NewGuid(),
+            Status = PaymentStatus.Authorized,
+            CardNumberLastFour = "1234",
+            ExpiryMonth = 12,
+            ExpiryYear = 2026,
+            Currency = "GBP",
+            Amount = 1000,
+            IdempotencyKey = idempotencyKey
+        };
+
+        repository.Add(payment);
+
+        // Act
+        var result = repository.GetByIdempotencyKey(idempotencyKey);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.Id, Is.EqualTo(payment.Id));
+        Assert.That(result.IdempotencyKey, Is.EqualTo(idempotencyKey));
+        Assert.That(result.Status, Is.EqualTo(PaymentStatus.Authorized));
+    }
+
+    [Test]
+    public void GetByIdempotencyKey_WithInvalidKey_ReturnsNull()
+    {
+        // Arrange
+        var repository = new PaymentsRepository();
+        var payment = new PostPaymentResponse
+        {
+            Id = Guid.NewGuid(),
+            Status = PaymentStatus.Authorized,
+            CardNumberLastFour = "1234",
+            ExpiryMonth = 12,
+            ExpiryYear = 2026,
+            Currency = "GBP",
+            Amount = 1000,
+            IdempotencyKey = "key-1"
+        };
+
+        repository.Add(payment);
+
+        // Act
+        var result = repository.GetByIdempotencyKey("non-existent-key");
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void GetByIdempotencyKey_WithNullIdempotencyKey_ReturnsNull()
+    {
+        // Arrange
+        var repository = new PaymentsRepository();
+        var payment = new PostPaymentResponse
+        {
+            Id = Guid.NewGuid(),
+            Status = PaymentStatus.Authorized,
+            CardNumberLastFour = "1234",
+            ExpiryMonth = 12,
+            ExpiryYear = 2026,
+            Currency = "GBP",
+            Amount = 1000,
+            IdempotencyKey = null
+        };
+
+        repository.Add(payment);
+
+        // Act
+        var result = repository.GetByIdempotencyKey("some-key");
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public void GetByIdempotencyKey_WithMultiplePayments_ReturnsCorrectOne()
+    {
+        // Arrange
+        var repository = new PaymentsRepository();
+        var targetKey = "target-key";
+
+        repository.Add(new PostPaymentResponse
+        {
+            Id = Guid.NewGuid(),
+            Status = PaymentStatus.Authorized,
+            CardNumberLastFour = "1111",
+            ExpiryMonth = 1,
+            ExpiryYear = 2026,
+            Currency = "GBP",
+            Amount = 100,
+            IdempotencyKey = "key-1"
+        });
+
+        var targetPayment = new PostPaymentResponse
+        {
+            Id = Guid.NewGuid(),
+            Status = PaymentStatus.Declined,
+            CardNumberLastFour = "9999",
+            ExpiryMonth = 12,
+            ExpiryYear = 2026,
+            Currency = "EUR",
+            Amount = 5000,
+            IdempotencyKey = targetKey
+        };
+        repository.Add(targetPayment);
+
+        repository.Add(new PostPaymentResponse
+        {
+            Id = Guid.NewGuid(),
+            Status = PaymentStatus.Authorized,
+            CardNumberLastFour = "2222",
+            ExpiryMonth = 6,
+            ExpiryYear = 2027,
+            Currency = "USD",
+            Amount = 300,
+            IdempotencyKey = "key-2"
+        });
+
+        // Act
+        var result = repository.GetByIdempotencyKey(targetKey);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.Id, Is.EqualTo(targetPayment.Id));
+        Assert.That(result.CardNumberLastFour, Is.EqualTo("9999"));
+        Assert.That(result.IdempotencyKey, Is.EqualTo(targetKey));
+    }
 }

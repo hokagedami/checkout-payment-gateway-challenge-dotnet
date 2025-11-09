@@ -4,6 +4,7 @@
 - [Overview](#overview)
 - [Base URL](#base-url)
 - [Authentication](#authentication)
+- [Idempotency](#idempotency)
 - [Endpoints](#endpoints)
   - [POST /api/Payments](#post-apipayments)
   - [GET /api/Payments/{id}](#get-apipaymentsid)
@@ -32,6 +33,70 @@ Production:  https://api.paymentgateway.com
 
 **Current Version**: No authentication required (demonstration purposes)
 
+## Idempotency
+
+The Payment Gateway API supports idempotency to prevent duplicate payments.
+
+### Idempotency-Key Header
+
+**Header Name**: `Idempotency-Key`
+**Value**: String (recommended: UUID v4)
+**Required**: No (optional)
+**Max Length**: 255 characters
+
+### How It Works
+
+1. **First Request**: When a payment request includes an idempotency key, the API processes it normally and associates the key with the payment response
+2. **Duplicate Request**: If the same idempotency key is used again, the API returns the cached response without re-processing the payment or calling the bank
+3. **No Key Provided**: Requests without an idempotency key are treated as unique and always processed
+
+### Example Usage
+
+```bash
+curl -X POST https://localhost:5001/api/Payments \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000" \
+  -d '{
+    "cardNumber": "2222405343248877",
+    "expiryMonth": 12,
+    "expiryYear": 2026,
+    "currency": "GBP",
+    "amount": 1000,
+    "cvv": "123"
+  }'
+```
+
+### Response with Idempotency Key
+
+All payment responses include the `idempotencyKey` field if one was provided:
+
+```json
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "status": "Authorized",
+  "cardNumberLastFour": "8877",
+  "expiryMonth": 12,
+  "expiryYear": 2026,
+  "currency": "GBP",
+  "amount": 1000,
+  "idempotencyKey": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+### Best Practices
+
+1. **Generate Keys Client-Side**: Create idempotency keys before making the request
+2. **Use UUIDs**: Recommended to use UUID v4 for uniqueness
+3. **Reuse for Retries**: Use the same key for all retries of the same logical operation
+4. **Don't Reuse Across Operations**: Each unique payment should have a different key
+5. **Store Keys**: Keep track of idempotency keys to enable safe retries
+
+### Idempotency Guarantees
+
+- Works for all payment statuses: Authorized, Declined, and Rejected
+- Prevents duplicate bank charges
+- Returns the exact same response for duplicate requests
+- No limit on retry window (keys are stored indefinitely in this implementation)
 
 ## Endpoints
 
@@ -44,6 +109,9 @@ Process a new payment request through the banking partner.
 **Method**: `POST`
 **URL**: `/api/Payments`
 **Content-Type**: `application/json`
+
+**Headers** (optional):
+- `Idempotency-Key`: String (UUID recommended) - Prevents duplicate payments
 
 **Body Schema**:
 ```json

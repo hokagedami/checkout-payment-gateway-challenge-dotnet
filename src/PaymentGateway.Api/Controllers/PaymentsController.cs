@@ -23,8 +23,19 @@ public class PaymentsController : Controller
     }
 
     [HttpPost]
-    public async Task<ActionResult<PostPaymentResponse>> PostPaymentAsync([FromBody] PostPaymentRequest request)
+    public async Task<ActionResult<PostPaymentResponse>> PostPaymentAsync(
+        [FromBody] PostPaymentRequest request,
+        [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey)
     {
+        if (!string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            var existingPayment = _paymentsRepository.GetByIdempotencyKey(idempotencyKey);
+            if (existingPayment != null)
+            {
+                return Ok(existingPayment);
+            }
+        }
+
         if (!ModelState.IsValid)
         {
             var rejectedPayment = new PostPaymentResponse
@@ -35,7 +46,8 @@ public class PaymentsController : Controller
                 ExpiryMonth = request.ExpiryMonth,
                 ExpiryYear = request.ExpiryYear,
                 Currency = request.Currency,
-                Amount = request.Amount
+                Amount = request.Amount,
+                IdempotencyKey = idempotencyKey
             };
 
             _paymentsRepository.Add(rejectedPayment);
@@ -71,7 +83,8 @@ public class PaymentsController : Controller
             ExpiryMonth = request.ExpiryMonth,
             ExpiryYear = request.ExpiryYear,
             Currency = request.Currency,
-            Amount = request.Amount
+            Amount = request.Amount,
+            IdempotencyKey = idempotencyKey
         };
 
         _paymentsRepository.Add(payment);

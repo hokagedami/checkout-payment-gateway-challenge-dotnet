@@ -11,15 +11,15 @@
 
 ## Overview
 
-The Payment Gateway API has **158 comprehensive tests** achieving full code coverage across all components. The test suite is built using **NUnit 4.0** with **Moq** for mocking dependencies.
+The Payment Gateway API has **169 comprehensive tests** achieving full code coverage across all components. The test suite is built using **NUnit 4.0** with **Moq** for mocking dependencies.
 
 ### Test Statistics
 
 ```
-Total Tests:     158
-Unit Tests:      99
-Integration:     48
-E2E Tests:       11
+Total Tests:     169
+Unit Tests:      103
+Integration:     54
+E2E Tests:       12
 Pass Rate:       100%
 Framework:       NUnit 4.0
 Mocking:         Moq 4.20
@@ -32,10 +32,10 @@ Mocking:         Moq 4.20
 | CardNumberExtensions | 22 | Unit | 100% |
 | FutureExpiryDateAttribute | 11 | Unit | 100% |
 | PostPaymentRequest Validation | 53 | Unit | 100% |
-| PaymentsRepository | 7 | Unit | 100% |
+| PaymentsRepository | 11 | Unit | 100% |
 | BankClient | 6 | Unit | 100% |
-| PaymentsController | 48 | Integration | 100% |
-| Payment Gateway E2E | 11 | E2E | 100% |
+| PaymentsController | 54 | Integration | 100% |
+| Payment Gateway E2E | 12 | E2E | 100% |
 
 ## Test Strategy
 
@@ -44,13 +44,13 @@ Mocking:         Moq 4.20
 ```
       /\
      /  \
-    / E2E\      ← 11 tests (full system)
+    / E2E\      ← 12 tests (full system)
    /______\
   /        \
- /Integration\  ← 48 tests (API endpoints)
+ /Integration\  ← 54 tests (API endpoints)
 /____________\
 /            \
-/    Unit     \ ← 99 tests (business logic)
+/    Unit     \ ← 103 tests (business logic)
 /______________\
 ```
 
@@ -245,7 +245,117 @@ Tests automatically run when files change.
 
 ## Test Categories
 
-### 1. End-to-End Tests (11 tests)
+### 1. Idempotency Tests (12 tests total)
+
+**Purpose**: Verify duplicate payment prevention across all test levels
+
+#### Unit Tests (4 tests - PaymentsRepository)
+- `GetByIdempotencyKey_WithValidKey_ReturnsPayment`
+- `GetByIdempotencyKey_WithInvalidKey_ReturnsNull`
+- `GetByIdempotencyKey_WithNullIdempotencyKey_ReturnsNull`
+- `GetByIdempotencyKey_WithMultiplePayments_ReturnsCorrectOne`
+
+**Example**:
+```csharp
+[Test]
+public void GetByIdempotencyKey_WithValidKey_ReturnsPayment()
+{
+    // Arrange
+    var repository = new PaymentsRepository();
+    var idempotencyKey = "test-key-123";
+    var payment = new PostPaymentResponse
+    {
+        Id = Guid.NewGuid(),
+        Status = PaymentStatus.Authorized,
+        IdempotencyKey = idempotencyKey
+    };
+    repository.Add(payment);
+
+    // Act
+    var result = repository.GetByIdempotencyKey(idempotencyKey);
+
+    // Assert
+    Assert.That(result, Is.Not.Null);
+    Assert.That(result.IdempotencyKey, Is.EqualTo(idempotencyKey));
+}
+```
+
+#### Integration Tests (6 tests - PaymentsController)
+- `ProcessPayment_WithIdempotencyKey_ReturnsSamePaymentOnRetry`
+- `ProcessPayment_WithDifferentIdempotencyKeys_CreatesMultiplePayments`
+- `ProcessPayment_WithoutIdempotencyKey_CreatesMultiplePayments`
+- `ProcessPayment_WithIdempotencyKey_ReturnsRejectedPaymentOnRetry`
+- `ProcessPayment_WithIdempotencyKey_ReturnsDeclinedPaymentOnRetry`
+
+**Example**:
+```csharp
+[Test]
+public async Task ProcessPayment_WithIdempotencyKey_ReturnsSamePaymentOnRetry()
+{
+    // Arrange
+    var mockBankClient = new Mock<IBankClient>();
+    mockBankClient.Setup(x => x.ProcessPaymentAsync(It.IsAny<BankPaymentRequest>()))
+        .ReturnsAsync(new BankPaymentResponse { Authorized = true });
+
+    var paymentsRepository = new PaymentsRepository();
+    var client = CreateTestClient(paymentsRepository, mockBankClient);
+    var idempotencyKey = "test-key-123";
+
+    client.DefaultRequestHeaders.Add("Idempotency-Key", idempotencyKey);
+
+    // Act - First request
+    var firstResponse = await client.PostAsJsonAsync("/api/Payments", request);
+    var firstPayment = await firstResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+
+    // Act - Retry with same key
+    var secondResponse = await client.PostAsJsonAsync("/api/Payments", request);
+    var secondPayment = await secondResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+
+    // Assert - Same payment returned
+    Assert.That(secondPayment.Id, Is.EqualTo(firstPayment.Id));
+    Assert.That(paymentsRepository.Payments.Count, Is.EqualTo(1)); // Only one payment stored
+
+    // Bank called only once
+    mockBankClient.Verify(x => x.ProcessPaymentAsync(It.IsAny<BankPaymentRequest>()), Times.Once);
+}
+```
+
+#### E2E Tests (2 tests - Full System)
+- `PostPayment_WithIdempotencyKey_PreventsDuplicatePayments`
+- `PostPayment_WithDifferentIdempotencyKeys_CreatesMultiplePayments`
+
+**Example**:
+```csharp
+[Test]
+[Category("E2E")]
+public async Task PostPayment_WithIdempotencyKey_PreventsDuplicatePayments()
+{
+    // Arrange
+    var idempotencyKey = $"e2e-test-{Guid.NewGuid()}";
+    _client.DefaultRequestHeaders.Add("Idempotency-Key", idempotencyKey);
+
+    // Act - First request
+    var firstResponse = await _client.PostAsJsonAsync("/api/Payments", request);
+    var firstPayment = await firstResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+
+    // Act - Retry (network failure simulation)
+    var secondResponse = await _client.PostAsJsonAsync("/api/Payments", request);
+    var secondPayment = await secondResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+
+    // Assert - Same payment ID returned, no duplicate charge
+    Assert.That(secondPayment.Id, Is.EqualTo(firstPayment.Id));
+    Assert.That(secondPayment.IdempotencyKey, Is.EqualTo(idempotencyKey));
+}
+```
+
+**Key Test Scenarios**:
+- Duplicate detection for authorized payments
+- Duplicate detection for declined payments
+- Duplicate detection for rejected payments
+- Different keys create different payments
+- No key provided allows duplicates (backward compatibility)
+
+### 2. End-to-End Tests (12 tests)
 
 **File**: `E2E/PaymentGatewayE2ETests.cs`
 
@@ -258,6 +368,7 @@ Tests automatically run when files change.
 - Multiple currencies support
 - Leading zero preservation
 - Complete payment workflows
+- Idempotency duplicate prevention (2 tests)
 
 **Running E2E Tests**:
 ```bash
@@ -294,7 +405,7 @@ public async Task E2E_CompletePaymentFlow_AuthorizedDeclinedRejected()
 
 **Note**: E2E tests require Docker and running services. See [E2E-README.md](./E2E-README.md) for detailed setup instructions.
 
-### 2. CardNumberExtensions Tests (22 tests)
+### 3. CardNumberExtensions Tests (22 tests)
 
 **File**: `Helpers/CardNumberExtensionsTests.cs`
 

@@ -8,6 +8,7 @@ This Payment Gateway API allows merchants to process payments by integrating wit
 
 - **Payment Processing**: Submit payment requests and receive authorization/decline responses
 - **Payment Retrieval**: Query historical payment information
+- **Idempotency**: Prevent duplicate payments using idempotency keys
 - **Comprehensive Validation**: Multi-layer validation with detailed error messages
 - **Audit Trail**: All payment attempts (authorized, declined, and rejected) are stored
 - **Card Security**: Card numbers are masked, storing only the last 4 digits
@@ -17,6 +18,7 @@ This Payment Gateway API allows merchants to process payments by integrating wit
 ### Core Functionality
 - Process payment requests with full validation
 - Retrieve payment details by ID
+- Idempotency support via Idempotency-Key header
 - Support for multiple currencies (USD, GBP, EUR)
 - Support for 14-19 digit card numbers
 - 3 or 4 digit CVV support
@@ -33,10 +35,10 @@ This Payment Gateway API allows merchants to process payments by integrating wit
 - No sensitive data in logs
 
 ### Quality Assurance
-- **158 comprehensive tests** (100% passing)
-  - 99 unit tests
-  - 48 integration tests
-  - 11 end-to-end tests
+- **169 comprehensive tests** (100% passing)
+  - 103 unit tests
+  - 54 integration tests
+  - 12 end-to-end tests
 - NUnit test framework with [SetUp]/[TearDown] lifecycle
 - Test-Driven Development (TDD) approach
 - Full code coverage
@@ -138,6 +140,47 @@ Retrieve payment details by ID
   "status": 404
 }
 ```
+
+## Idempotency
+
+The Payment Gateway supports idempotency to prevent duplicate payments caused by network issues, timeouts, or accidental retries.
+
+### How It Works
+
+Include an `Idempotency-Key` header with a unique value (e.g., UUID) in your payment request:
+
+```bash
+curl -X POST https://localhost:5001/api/payments \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000" \
+  -d '{
+    "cardNumber": "2222405343248877",
+    "expiryMonth": 12,
+    "expiryYear": 2026,
+    "currency": "GBP",
+    "amount": 1000,
+    "cvv": "123"
+  }'
+```
+
+### Behavior
+
+- **First Request**: Processes the payment normally and stores the idempotency key
+- **Retry with Same Key**: Returns the existing payment response without calling the bank
+- **Different Keys**: Treated as separate, independent payments
+
+### Benefits
+
+1. **Prevents Duplicate Charges**: Network failures won't result in multiple charges
+2. **Safe Retries**: Clients can safely retry failed requests without risk
+3. **Idempotent for All Statuses**: Works for Authorized, Declined, and Rejected payments
+
+### Best Practices
+
+- Use UUIDs or cryptographically random values as idempotency keys
+- Store keys on the client side before making the request
+- Reuse the same key for all retries of the same logical payment
+- Do not reuse keys across different payment attempts
 
 ## Project Structure
 
@@ -251,18 +294,3 @@ Examples:
 ## License
 
 This is a technical challenge submission.
-
-## Authors
-
-Developed as part of the Payment Gateway technical challenge.
-
----
-
-**Note**: This is a demonstration project. For production use, consider:
-- Persistent database storage
-- Authentication & authorization
-- Rate limiting
-- Encryption at rest
-- PCI DSS compliance
-- Distributed caching
-- Event sourcing for audit trail

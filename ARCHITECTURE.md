@@ -224,6 +224,11 @@ public class PaymentsRepository
     {
         return Payments.FirstOrDefault(p => p.Id == id);
     }
+
+    public PostPaymentResponse? GetByIdempotencyKey(string idempotencyKey)
+    {
+        return Payments.FirstOrDefault(p => p.IdempotencyKey == idempotencyKey);
+    }
 }
 ```
 
@@ -232,6 +237,7 @@ public class PaymentsRepository
 - Easily replaceable with database implementation
 - Thread-safe operations (List<T> is thread-safe for reads)
 - Returns null for not found (explicit handling)
+- **Idempotency support**: Lookup by idempotency key for duplicate detection
 
 ### Validation
 
@@ -301,38 +307,44 @@ public static class CardNumberExtensions
 
 ```
 1. Client sends POST /api/payments
+   - Optional: Idempotency-Key header
         ↓
-2. Model Binding & Validation
+2. Controller: Check idempotency key
+   - If key provided → PaymentsRepository.GetByIdempotencyKey()
+   - If existing payment found → Return cached response (SKIP rest)
+        ↓
+3. Model Binding & Validation
    - Data Annotations validated
    - FutureExpiryDate validated
         ↓
-3a. If Invalid → Controller
-   - Create rejected payment
+4a. If Invalid → Controller
+   - Create rejected payment with idempotency key
    - Store in repository
    - Return 400 BadRequest
 
-3b. If Valid → Controller
+4b. If Valid → Controller
         ↓
-4. Transform to BankPaymentRequest
+5. Transform to BankPaymentRequest
         ↓
-5. BankClient.ProcessPaymentAsync()
+6. BankClient.ProcessPaymentAsync()
    - HTTP call to bank API
    - Error handling
    - Return BankPaymentResponse or null
         ↓
-6a. If bank returns null → Controller
+7a. If bank returns null → Controller
    - Return 503 Service Unavailable
 
-6b. If bank succeeds → Controller
+7b. If bank succeeds → Controller
    - Map to PostPaymentResponse
    - Set status (Authorized/Declined)
    - Extract last 4 card digits
    - Generate new GUID
+   - Set idempotency key if provided
         ↓
-7. PaymentsRepository.Add()
-   - Store payment
+8. PaymentsRepository.Add()
+   - Store payment with idempotency key
         ↓
-8. Return 200 OK with payment details
+9. Return 200 OK with payment details
 ```
 
 ### Payment Retrieval Flow
@@ -447,6 +459,63 @@ CardNumberLastFour = request.CardNumber.ExtractLastFourDigits()
 - No I/O blocking
 - Simpler code
 - Easy to make async when adding database
+
+### 8. Idempotency Support
+
+**Decision**: Implement idempotency via optional `Idempotency-Key` header
+
+**Rationale**:
+- **Prevents Duplicate Payments**: Network retries won't charge customers multiple times
+- **Industry Standard**: Follows patterns used by Stripe, PayPal, and other payment providers
+- **Safe Retries**: Clients can safely retry failed requests
+- **Backward Compatible**: Optional header doesn't break existing integrations
+
+**Implementation Details**:
+
+```csharp
+public async Task<ActionResult<PostPaymentResponse>> PostPaymentAsync(
+    [FromBody] PostPaymentRequest request,
+    [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey)
+{
+    // Check for existing payment with same idempotency key
+    if (!string.IsNullOrWhiteSpace(idempotencyKey))
+    {
+        var existingPayment = _paymentsRepository.GetByIdempotencyKey(idempotencyKey);
+        if (existingPayment != null)
+        {
+            return Ok(existingPayment); // Return cached response
+        }
+    }
+
+    // Process payment normally and store with idempotency key
+    // ...
+}
+```
+
+**Key Design Choices**:
+
+1. **Optional Header**: No breaking changes for existing clients
+2. **Pre-Validation Check**: Idempotency checked before validation to return exact previous response
+3. **All Statuses Supported**: Works for Authorized, Declined, and Rejected payments
+4. **String Key**: Flexible - accepts UUIDs, client-generated keys, or any unique string
+5. **Repository Lookup**: Single source of truth for idempotency key storage
+
+**Benefits**:
+- Zero duplicate charges from network issues
+- Client-side retry safety
+- Audit trail maintained (idempotency key stored with payment)
+- No additional infrastructure needed (uses existing repository)
+
+**Trade-offs**:
+- In-memory implementation: Keys lost on restart (production would use persistent storage)
+- No key expiration: Keys stored indefinitely (production would implement TTL)
+- No conflict detection: Same key with different payment data returns original (by design)
+
+**Production Considerations**:
+- Add database index on `IdempotencyKey` for performance
+- Implement key expiration (e.g., 24 hours)
+- Consider distributed locking for high-concurrency scenarios
+- Add key conflict validation (same key, different data) with 409 Conflict response
 
 ## Security Considerations
 
