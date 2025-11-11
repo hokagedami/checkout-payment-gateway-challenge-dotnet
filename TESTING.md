@@ -153,9 +153,14 @@ public async Task PostPayment_WithValidCard_ReturnsAuthorized()
 ```
 test/PaymentGateway.Api.Tests/
 ├── Controllers/
-│   └── PaymentsControllerTests.cs          # 48 integration tests
+│   ├── PaymentsControllerTestBase.cs       # Shared test infrastructure
+│   ├── GetPaymentTests.cs                  # 5 GET endpoint tests
+│   ├── PostPaymentTests.cs                 # 13 POST success tests
+│   ├── PaymentValidationTests.cs           # 6 validation tests
+│   ├── RejectedPaymentTests.cs             # 10 rejected payment tests
+│   └── IdempotencyTests.cs                 # 6 idempotency tests
 ├── E2E/
-│   └── PaymentGatewayE2ETests.cs           # 11 E2E tests
+│   └── PaymentGatewayE2ETests.cs           # 12 E2E tests
 ├── Helpers/
 │   └── CardNumberExtensionsTests.cs        # 22 unit tests
 ├── Validation/
@@ -165,9 +170,55 @@ test/PaymentGateway.Api.Tests/
 ├── Services/
 │   └── BankClientTests.cs                  # 6 unit tests
 ├── Repositories/
-│   └── PaymentsRepositoryTests.cs          # 7 unit tests
+│   └── PaymentsRepositoryTests.cs          # 10 unit tests
 └── Usings.cs                               # Global test using
 ```
+
+### Controller Test Organization
+
+Controller tests are split into feature-focused files for better maintainability:
+
+- **PaymentsControllerTestBase.cs**: Shared test infrastructure
+  - `CreateTestClient()` - Creates HTTP client with mocked dependencies
+  - `CreateInMemoryContext()` - Creates EF Core InMemory database
+  - `CreateValidPaymentRequest()` - Factory for valid test requests
+  - Setup/TearDown lifecycle methods
+
+- **GetPaymentTests.cs**: Payment retrieval tests (5 tests)
+  - Successful retrieval
+  - 404 for missing payments
+  - Correct payment details
+  - Declined payment status
+  - Rejected payment retrieval
+
+- **PostPaymentTests.cs**: Successful payment processing (13 tests)
+  - Authorized and declined responses
+  - Payment storage verification
+  - Multiple currencies support
+  - Different card lengths (14-19 digits)
+  - CVV formats (3 and 4 digits)
+  - Amount ranges (min/max)
+  - Last 4 digits extraction
+
+- **PaymentValidationTests.cs**: Validation failures (6 tests)
+  - Invalid card numbers
+  - Invalid expiry months
+  - Expired cards
+  - Invalid currencies
+  - Invalid CVVs
+  - Invalid amounts
+
+- **RejectedPaymentTests.cs**: Rejected payment storage (10 tests)
+  - Validation failures create rejected payments
+  - Rejected payments stored with correct status
+  - Edge cases (null, short, alphabetic card numbers)
+  - Rejected payments don't call bank
+
+- **IdempotencyTests.cs**: Duplicate prevention (6 tests)
+  - Same key returns same payment
+  - Different keys create different payments
+  - No key allows duplicates
+  - Idempotency for all payment statuses (authorized, declined, rejected)
 
 ### Test Naming Convention
 
@@ -537,82 +588,100 @@ public async Task ProcessPaymentAsync_WithException_ReturnsNull()
 }
 ```
 
-### 7. Controller Integration Tests (48 tests)
+### 7. Controller Integration Tests (40 tests across 5 files)
 
-**File**: `Controllers/PaymentsControllerTests.cs`
+**Files**: Split by feature for better organization and maintainability
 
-**Coverage**:
-- **GET endpoint** (5 tests):
-  - Successful retrieval
-  - 404 for missing payment
-  - Correct payment details
-  - Declined payment status
-  - Retrieve after POST
+#### **GetPaymentTests.cs** (5 tests)
+- `RetrievesAPaymentSuccessfully`
+- `Returns404IfPaymentNotFound`
+- `GetPayment_ReturnsCorrectPaymentDetails`
+- `GetPayment_WithDeclinedPayment_ReturnsCorrectStatus`
+- `RejectedPayment_CanBeRetrievedById`
 
-- **POST endpoint - Success** (19 tests):
-  - Authorized response
-  - Declined response
-  - Storage in repository
-  - Multiple currencies
-  - Different card lengths
-  - 3 and 4 digit CVV
-  - Card masking
-  - Min/max amounts
+#### **PostPaymentTests.cs** (13 tests)
+- `ProcessPayment_WithValidRequest_ReturnsAuthorized`
+- `ProcessPayment_WithValidRequest_ReturnsDeclined`
+- `ProcessPayment_WhenBankReturnsNull_Returns503`
+- `ProcessPayment_StoresPaymentInRepository`
+- `ProcessPayment_WithMultipleCurrencies_AllSucceed`
+- `ProcessPayment_WithDifferentCardLengths_AllSucceed`
+- `ProcessPayment_With3DigitCvv_Succeeds`
+- `ProcessPayment_With4DigitCvv_Succeeds`
+- `ProcessPayment_ExtractsCorrectLastFourDigits`
+- `ProcessPayment_WithMinimumAmount_Succeeds`
+- `ProcessPayment_WithLargeAmount_Succeeds`
 
-- **POST endpoint - Validation** (8 tests):
-  - Invalid card number
-  - Invalid expiry month
-  - Expired card
-  - Invalid currency
-  - Invalid CVV
-  - Invalid amount
+#### **PaymentValidationTests.cs** (6 tests)
+- `ProcessPayment_WithInvalidCardNumber_ReturnsBadRequest` (3 test cases)
+- `ProcessPayment_WithInvalidExpiryMonth_ReturnsBadRequest` (2 test cases)
+- `ProcessPayment_WithExpiredCard_ReturnsBadRequest`
+- `ProcessPayment_WithInvalidCurrency_ReturnsBadRequest` (3 test cases)
+- `ProcessPayment_WithInvalidCvv_ReturnsBadRequest` (3 test cases)
+- `ProcessPayment_WithInvalidAmount_ReturnsBadRequest`
 
-- **POST endpoint - Errors** (1 test):
-  - Bank unavailable (503)
+#### **RejectedPaymentTests.cs** (10 tests)
+- `ProcessPayment_WithInvalidCardNumber_CreatesRejectedPayment`
+- `ProcessPayment_WithExpiredCard_CreatesRejectedPayment`
+- `ProcessPayment_WithInvalidCurrency_CreatesRejectedPayment`
+- `ProcessPayment_WithInvalidCvv_CreatesRejectedPayment`
+- `ProcessPayment_WithInvalidAmount_CreatesRejectedPayment`
+- `ProcessPayment_WithMultipleValidationErrors_CreatesRejectedPayment`
+- `ProcessPayment_WithNullCardNumber_HandlesGracefully`
+- `ProcessPayment_WithShortCardNumber_ExtractsAvailableDigits`
+- `ProcessPayment_WithAlphabeticCardNumber_HandlesGracefully`
+- `ProcessPayment_RejectedPayments_DoNotCallBank`
 
-- **Rejected Payments** (11 tests):
-  - Invalid card creates rejected
-  - Expired card creates rejected
-  - Invalid currency creates rejected
-  - Invalid CVV creates rejected
-  - Invalid amount creates rejected
-  - Multiple errors creates rejected
-  - Rejected can be retrieved
-  - Null card number handling
-  - Short card number handling
-  - Alphabetic card handling
-  - Rejected don't call bank
+#### **IdempotencyTests.cs** (6 tests)
+- `ProcessPayment_WithIdempotencyKey_ReturnsSamePaymentOnRetry`
+- `ProcessPayment_WithDifferentIdempotencyKeys_CreatesMultiplePayments`
+- `ProcessPayment_WithoutIdempotencyKey_CreatesMultiplePayments`
+- `ProcessPayment_WithIdempotencyKey_ReturnsRejectedPaymentOnRetry`
+- `ProcessPayment_WithIdempotencyKey_ReturnsDeclinedPaymentOnRetry`
 
-**SetUp/TearDown**:
+#### **PaymentsControllerTestBase.cs** - Shared Infrastructure
+
+All controller test classes inherit from this base class:
+
 ```csharp
-[SetUp]
-public void SetUp()
+public abstract class PaymentsControllerTestBase
 {
-    _random = new Random();
-    _factory = new WebApplicationFactory<Program>();
-}
+    protected Random Random = null!;
+    protected WebApplicationFactory<Program> Factory = null!;
 
-[TearDown]
-public void TearDown()
-{
-    _factory?.Dispose();
+    [SetUp]
+    public void SetUp()
+    {
+        Random = new Random();
+        Factory = new WebApplicationFactory<Program>();
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        Factory?.Dispose();
+    }
+
+    protected (HttpClient client, PaymentGatewayDbContext context) CreateTestClient(
+        Mock<IBankClient>? mockBankClient = null)
+    {
+        // Creates test client with DI overrides
+        // Returns tuple with client and shared context
+    }
+
+    protected static PostPaymentRequest CreateValidPaymentRequest()
+    {
+        // Creates valid payment request
+    }
 }
 ```
 
-**Helper Methods**:
-```csharp
-private HttpClient CreateTestClient(
-    PaymentsRepository? paymentsRepository = null,
-    Mock<IBankClient>? mockBankClient = null)
-{
-    // Creates test client with DI overrides
-}
-
-private static PostPaymentRequest CreateValidPaymentRequest()
-{
-    // Creates valid payment request
-}
-```
+**Benefits of Split Structure**:
+- **Better Organization**: Tests grouped by feature area
+- **Improved Maintainability**: Smaller files (~100-300 lines each)
+- **Easier Navigation**: Find tests quickly by feature
+- **Clear Separation**: GET, POST success, validation, rejection, and idempotency
+- **Reduced Merge Conflicts**: Changes isolated to specific feature files
 
 ## TDD Approach
 

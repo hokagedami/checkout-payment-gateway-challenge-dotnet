@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using PaymentGateway.Api.Enums;
 using PaymentGateway.Api.Helpers;
 using PaymentGateway.Api.Models.Bank;
@@ -9,27 +11,30 @@ using PaymentGateway.Api.Services;
 
 namespace PaymentGateway.Api.Controllers;
 
+[Authorize]
+[EnableRateLimiting("fixed")]
 [Route("api/[controller]")]
 [ApiController]
 public class PaymentsController : Controller
 {
-    private readonly PaymentsRepository _paymentsRepository;
+    private readonly IPaymentsRepository _paymentsRepository;
     private readonly IBankClient _bankClient;
 
-    public PaymentsController(PaymentsRepository paymentsRepository, IBankClient bankClient)
+    public PaymentsController(IPaymentsRepository paymentsRepository, IBankClient bankClient)
     {
         _paymentsRepository = paymentsRepository;
         _bankClient = bankClient;
     }
 
     [HttpPost]
+    [EnableRateLimiting("payments")]
     public async Task<ActionResult<PostPaymentResponse>> PostPaymentAsync(
         [FromBody] PostPaymentRequest request,
         [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey)
     {
         if (!string.IsNullOrWhiteSpace(idempotencyKey))
         {
-            var existingPayment = _paymentsRepository.GetByIdempotencyKey(idempotencyKey);
+            var existingPayment = await _paymentsRepository.GetByIdempotencyKeyAsync(idempotencyKey);
             if (existingPayment != null)
             {
                 return Ok(existingPayment);
@@ -50,7 +55,7 @@ public class PaymentsController : Controller
                 IdempotencyKey = idempotencyKey
             };
 
-            _paymentsRepository.Add(rejectedPayment);
+            await _paymentsRepository.AddAsync(rejectedPayment);
 
             return BadRequest(new
             {
@@ -87,19 +92,19 @@ public class PaymentsController : Controller
             IdempotencyKey = idempotencyKey
         };
 
-        _paymentsRepository.Add(payment);
+        await _paymentsRepository.AddAsync(payment);
 
         return Ok(payment);
     }
 
     [HttpGet("{id:guid}")]
-    public Task<ActionResult<GetPaymentResponse?>> GetPaymentAsync(Guid id)
+    public async Task<ActionResult<GetPaymentResponse?>> GetPaymentAsync(Guid id)
     {
-        var payment = _paymentsRepository.Get(id);
+        var payment = await _paymentsRepository.GetAsync(id);
 
         if (payment == null)
         {
-            return Task.FromResult<ActionResult<GetPaymentResponse?>>(NotFound());
+            return NotFound();
         }
 
         var response = new GetPaymentResponse
@@ -113,6 +118,6 @@ public class PaymentsController : Controller
             Amount = payment.Amount
         };
 
-        return Task.FromResult<ActionResult<GetPaymentResponse?>>(Ok(response));
+        return Ok(response);
     }
 }
