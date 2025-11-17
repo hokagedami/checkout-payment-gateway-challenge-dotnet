@@ -1,6 +1,8 @@
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using PaymentGateway.Api.Authentication;
 using PaymentGateway.Api.Data;
+using PaymentGateway.Api.Middleware;
 using PaymentGateway.Api.Repositories;
 using PaymentGateway.Api.Services;
 using Serilog;
@@ -19,10 +21,18 @@ builder.Host.UseSerilog();
 
 // Add services to the container.
 
-builder.Services.AddControllers()
+builder.Services.AddControllers(options =>
+    {
+        // Add custom validation filter to handle ModelState errors
+        options.Filters.Add<ModelStateValidationFilter>();
+    })
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    })
     .ConfigureApiBehaviorOptions(options =>
     {
-        // Disable automatic 400 responses to allow custom handling in controller
+        // Disable automatic 400 responses to allow custom handling in middleware
         options.SuppressModelStateInvalidFilter = true;
     });
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
@@ -60,6 +70,10 @@ builder.Services.AddAuthentication(ApiKeyAuthenticationDefaults.AuthenticationSc
 
 builder.Services.AddAuthorization();
 
+// Configure global exception handler
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
+
 // Configure Entity Framework Core with SQL Server
 builder.Services.AddDbContext<PaymentGatewayDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -86,12 +100,13 @@ using (var scope = app.Services.CreateScope())
     }
     else
     {
-        // For InMemory database, ensure it's created
         dbContext.Database.EnsureCreated();
     }
 }
 
 // Configure the HTTP request pipeline.
+app.UseExceptionHandler();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();

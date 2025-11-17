@@ -31,7 +31,7 @@ public class PostPaymentTests : PaymentsControllerTestBase
 
         // Act
         var response = await client.PostAsJsonAsync("/api/Payments", request);
-        var paymentResponse = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var paymentResponse = await ReadApiResponseAsync<PostPaymentResponse>(response);
 
         // Assert
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -62,7 +62,7 @@ public class PostPaymentTests : PaymentsControllerTestBase
 
         // Act
         var response = await client.PostAsJsonAsync("/api/Payments", request);
-        var paymentResponse = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var paymentResponse = await ReadApiResponseAsync<PostPaymentResponse>(response);
 
         // Assert
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -119,7 +119,7 @@ public class PostPaymentTests : PaymentsControllerTestBase
 
         // Act
         var response = await client.PostAsJsonAsync("/api/Payments", request);
-        var paymentResponse = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var paymentResponse = await ReadApiResponseAsync<PostPaymentResponse>(response);
 
         // Assert
         Assert.That(paymentResponse, Is.Not.Null);
@@ -156,7 +156,7 @@ public class PostPaymentTests : PaymentsControllerTestBase
             };
 
             var response = await client.PostAsJsonAsync("/api/Payments", request);
-            var paymentResponse = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
+            var paymentResponse = await ReadApiResponseAsync<PostPaymentResponse>(response);
 
             Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
             Assert.That(paymentResponse, Is.Not.Null);
@@ -278,7 +278,7 @@ public class PostPaymentTests : PaymentsControllerTestBase
 
         // Act
         var response = await client.PostAsJsonAsync("/api/Payments", request);
-        var paymentResponse = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var paymentResponse = await ReadApiResponseAsync<PostPaymentResponse>(response);
 
         // Assert
         Assert.That(paymentResponse, Is.Not.Null);
@@ -307,7 +307,7 @@ public class PostPaymentTests : PaymentsControllerTestBase
 
         // Act
         var response = await client.PostAsJsonAsync("/api/Payments", request);
-        var paymentResponse = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var paymentResponse = await ReadApiResponseAsync<PostPaymentResponse>(response);
 
         // Assert
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -337,7 +337,7 @@ public class PostPaymentTests : PaymentsControllerTestBase
 
         // Act
         var response = await client.PostAsJsonAsync("/api/Payments", request);
-        var paymentResponse = await response.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var paymentResponse = await ReadApiResponseAsync<PostPaymentResponse>(response);
 
         // Assert
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));

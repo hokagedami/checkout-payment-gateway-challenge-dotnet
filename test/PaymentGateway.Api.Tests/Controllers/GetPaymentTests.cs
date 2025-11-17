@@ -34,7 +34,7 @@ public class GetPaymentTests : PaymentsControllerTestBase
 
         // Act
         var response = await client.GetAsync($"/api/Payments/{payment.Id}");
-        var paymentResponse = await response.Content.ReadFromJsonAsync<GetPaymentResponse>();
+        var paymentResponse = await ReadApiResponseAsync<GetPaymentResponse>(response);
 
         // Assert
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -76,7 +76,7 @@ public class GetPaymentTests : PaymentsControllerTestBase
 
         // Act
         var response = await client.GetAsync($"/api/Payments/{paymentId}");
-        var paymentResponse = await response.Content.ReadFromJsonAsync<GetPaymentResponse>();
+        var paymentResponse = await ReadApiResponseAsync<GetPaymentResponse>(response);
 
         // Assert
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -112,7 +112,7 @@ public class GetPaymentTests : PaymentsControllerTestBase
 
         // Act
         var response = await client.GetAsync($"/api/Payments/{paymentId}");
-        var paymentResponse = await response.Content.ReadFromJsonAsync<GetPaymentResponse>();
+        var paymentResponse = await ReadApiResponseAsync<GetPaymentResponse>(response);
 
         // Assert
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -145,7 +145,7 @@ public class GetPaymentTests : PaymentsControllerTestBase
 
         // Act - Retrieve the rejected payment
         var getResponse = await client.GetAsync($"/api/Payments/{paymentId}");
-        var retrievedPayment = await getResponse.Content.ReadFromJsonAsync<GetPaymentResponse>();
+        var retrievedPayment = await ReadApiResponseAsync<GetPaymentResponse>(getResponse);
 
         // Assert
         Assert.That(getResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));

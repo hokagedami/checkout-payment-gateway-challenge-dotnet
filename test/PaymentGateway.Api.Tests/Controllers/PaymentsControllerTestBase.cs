@@ -1,3 +1,6 @@
+using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Moq;
 using Microsoft.EntityFrameworkCore;
 using PaymentGateway.Api.Data;
@@ -5,6 +8,7 @@ using PaymentGateway.Api.Services;
 using PaymentGateway.Api.Repositories;
 using Microsoft.AspNetCore.Mvc.Testing;
 using PaymentGateway.Api.Models.Requests;
+using PaymentGateway.Api.Models.Responses;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace PaymentGateway.Api.Tests.Controllers;
@@ -16,6 +20,28 @@ public abstract class PaymentsControllerTestBase
 {
     protected Random _random = null!;
     private WebApplicationFactory<Program> _factory = null!;
+    protected static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        Converters = { new JsonStringEnumConverter() }
+    };
+
+    /// <summary>
+    /// Helper method to extract data from ApiResponse wrapper
+    /// </summary>
+    protected static async Task<T?> ReadApiResponseAsync<T>(HttpResponseMessage response) where T : class
+    {
+        var apiResponse = await response.Content.ReadFromJsonAsync<ApiResponse<T>>(JsonOptions);
+        return apiResponse?.Data;
+    }
+
+    /// <summary>
+    /// Helper method to get full ApiResponse including errors
+    /// </summary>
+    protected static async Task<ApiResponse<T>?> ReadFullApiResponseAsync<T>(HttpResponseMessage response) where T : class
+    {
+        return await response.Content.ReadFromJsonAsync<ApiResponse<T>>(JsonOptions);
+    }
 
     [SetUp]
     public void SetUp()

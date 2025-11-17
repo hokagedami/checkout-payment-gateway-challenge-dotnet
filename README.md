@@ -42,19 +42,29 @@ This Payment Gateway API allows merchants to process payments by integrating wit
 - **Repository Pattern**: Interface-based data access with IPaymentsRepository
 - **All Payment Statuses Stored**: Authorized, Declined, and Rejected
 
-#### Observability
-- **Structured Logging**: Serilog with console and file sinks
+#### Observability & Error Handling
+- **Structured Logging**: Serilog with console, file, and Seq sinks
+- **Log Enrichment**: Includes machine name, thread ID, and log context
+- **Optional Seq Integration**: Advanced log querying and visualization at http://localhost:5341
+- **Global Exception Handler**: Centralized exception handling with RFC 7807 Problem Details
+- **Unified API Responses**: Consistent response format across all endpoints with `ApiResponse<T>` wrapper
 - **Async/Await Throughout**: Non-blocking operations
 
+#### Clean Architecture
+- **Middleware-Based Validation**: ModelState validation handled by middleware for cleaner controllers
+- **Separation of Concerns**: Clear separation between validation, business logic, and error handling
+- **DRY Principle**: Reusable response wrappers and helper methods throughout
+
 ### Quality Assurance
-- **76 comprehensive tests**
-  - 26 unit tests (Services: 6, Repositories: 9, Validation: 7, Helpers: 8, Models: 2)
-  - 39 integration tests (Controllers - feature-focused files)
-  - 11 end-to-end tests (covering core functionality)
+- **201 comprehensive tests**
+  - 57 unit tests (Services: 6, Repositories: 9, Validation: 7, Helpers: 8, Models: 12, Middleware: 6, Authentication: 10)
+  - 128 integration tests (Controllers - feature-focused files, Middleware validation: 7)
+  - 16 end-to-end tests (covering core functionality and edge cases)
 - NUnit test framework with [SetUp]/[TearDown] lifecycle
 - Test-Driven Development (TDD) approach
 - Docker-based E2E testing with real services (SQL Server, Bank API)
-- **E2E Pass Rate**: 100% (11/11 tests passing)
+- **Unit & Integration Pass Rate**: 100% (185/185 tests passing)
+- **E2E Pass Rate**: 100% (16/16 tests passing when services running)
 
 ## Quick Start
 
@@ -77,7 +87,11 @@ This starts the mock bank API on `http://localhost:8080`
 dotnet run --project src/PaymentGateway.Api
 ```
 
-The API will be available at `https://localhost:5001` (or check console output)
+The API will be available at:
+- **HTTPS**: `https://localhost:7092`
+- **HTTP**: `http://localhost:5067`
+
+**Note**: Check console output for actual ports as they may vary based on your environment.
 
 ### 3. Run Tests
 
@@ -94,14 +108,40 @@ dotnet test --logger "console;verbosity=detailed"
 
 **Note**: E2E tests require Docker and services to be running. The suite includes 11 tests covering core payment functionality.
 
-### 4. Access Swagger UI
+### 4. Test the API
 
-Navigate to `https://localhost:5001/swagger` to explore the API interactively.
+You can test the API using Swagger UI or Postman:
+
+#### Swagger UI
+Navigate to `https://localhost:7092/swagger` to explore the API interactively.
 
 **Note**: Swagger UI includes API Key authentication support. Use one of these keys:
 - `test-api-key-1`
 - `test-api-key-2`
 - `merchant-demo-key`
+
+#### Postman Collection
+A comprehensive Postman collection is included: `PaymentGateway.postman_collection.json`
+
+**Features:**
+- 18 pre-configured requests covering all API scenarios
+- Automated test assertions validating unified API response format
+- Environment variables for seamless testing
+- Complete coverage of payment statuses, authentication, validation, and idempotency
+
+**To use:**
+1. Import `PaymentGateway.postman_collection.json` into Postman
+2. Update the `baseUrl` variable to match your running API port (default: `https://localhost:7092`)
+3. Ensure the API is running
+4. Run requests individually or use Collection Runner
+
+The collection includes:
+- **Process Payment**: Authorized, Declined, Rejected scenarios
+- **Retrieve Payment**: Valid and invalid ID tests
+- **Authentication**: API key validation tests
+- **Validation**: Card number, expiry, currency, CVV validation
+- **Idempotency**: With key, retry same key, and without key scenarios
+- **Multi-Currency**: EUR currency support test
 
 ## API Endpoints
 
@@ -129,32 +169,41 @@ Idempotency-Key: <optional-unique-key>
 }
 ```
 
-**Response (200 OK):**
+**Response (200 OK - Authorized):**
 ```json
 {
-  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-  "status": "Authorized",
-  "cardNumberLastFour": "8877",
-  "expiryMonth": 12,
-  "expiryYear": 2026,
-  "currency": "USD",
-  "amount": 100
+  "success": true,
+  "data": {
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "status": "Authorized",
+    "cardNumberLastFour": "8877",
+    "expiryMonth": 12,
+    "expiryYear": 2026,
+    "currency": "USD",
+    "amount": 100,
+    "idempotencyKey": null
+  },
+  "errors": []
 }
 ```
 
 **Response (400 Bad Request - Rejected):**
 ```json
 {
-  "type": "https://tools.ietf.org/html/rfc7231#section-6.5.1",
-  "title": "One or more validation errors occurred.",
-  "status": 400,
-  "errors": {
-    "CardNumber": ["Card number must be between 14-19 digits"]
-  },
-  "payment": {
+  "success": false,
+  "data": {
     "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "status": "Rejected"
-  }
+    "status": "Rejected",
+    "cardNumberLastFour": "",
+    "expiryMonth": 12,
+    "expiryYear": 2026,
+    "currency": "USD",
+    "amount": 100,
+    "idempotencyKey": null
+  },
+  "errors": [
+    "Card number must be between 14-19 digits"
+  ]
 }
 ```
 
@@ -169,22 +218,75 @@ X-API-Key: test-api-key-1
 **Response (200 OK):**
 ```json
 {
-  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-  "status": "Authorized",
-  "cardNumberLastFour": "8877",
-  "expiryMonth": 12,
-  "expiryYear": 2026,
-  "currency": "USD",
-  "amount": 100
+  "success": true,
+  "data": {
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "status": "Authorized",
+    "cardNumberLastFour": "8877",
+    "expiryMonth": 12,
+    "expiryYear": 2026,
+    "currency": "USD",
+    "amount": 100
+  },
+  "errors": []
 }
 ```
 
 **Response (404 Not Found):**
 ```json
 {
-  "type": "https://tools.ietf.org/html/rfc7231#section-6.5.4",
-  "title": "Not Found",
-  "status": 404
+  "success": false,
+  "data": null,
+  "errors": [
+    "Payment not found"
+  ]
+}
+```
+
+## Unified API Response Format
+
+All API endpoints return responses in a consistent format using the `ApiResponse<T>` wrapper:
+
+```json
+{
+  "success": true/false,
+  "data": { /* response data or null */ },
+  "errors": [ /* array of error messages */ ]
+}
+```
+
+**Key Benefits:**
+- **Consistent Structure**: Same response shape for all endpoints (success or failure)
+- **Easy Error Handling**: Check `success` field for quick status determination
+- **Detailed Errors**: Array of human-readable error messages
+- **Type Safety**: Generic `data` field contains strongly-typed response objects
+
+**Examples:**
+
+**Success Response:**
+```json
+{
+  "success": true,
+  "data": { "id": "...", "status": "Authorized", ... },
+  "errors": []
+}
+```
+
+**Validation Error (400):**
+```json
+{
+  "success": false,
+  "data": { "id": "...", "status": "Rejected", ... },
+  "errors": ["Card number must be between 14-19 digits"]
+}
+```
+
+**Not Found (404):**
+```json
+{
+  "success": false,
+  "data": null,
+  "errors": ["Payment not found"]
 }
 ```
 
@@ -193,7 +295,7 @@ X-API-Key: test-api-key-1
 The API supports idempotent payment processing using the `Idempotency-Key` header:
 
 ```bash
-curl -X POST https://localhost:5001/api/payments \
+curl -X POST https://localhost:7092/api/payments \
   -H "X-API-Key: test-api-key-1" \
   -H "Idempotency-Key: unique-payment-123" \
   -H "Content-Type: application/json" \
@@ -209,14 +311,15 @@ curl -X POST https://localhost:5001/api/payments \
 
 **Idempotency Key Behavior:**
 - **First Request**: Processes payment and stores the idempotency key
-- **Retry with Same Key**: Returns the existing payment response without calling the bank
-- **Different Request, Same Key**: Returns 409 Conflict (different payment data)
+- **Retry with Same Key**: Returns the existing payment response (200 OK) without calling the bank
+- **No Idempotency Key**: Each request creates a new payment (non-idempotent behavior)
 
 **Best Practices:**
 - Use a unique key per logical payment attempt (e.g., UUID or order ID)
 - Store keys on the client side before making the request
 - Reuse the same key for all retries of the same logical payment
 - Do not reuse keys across different payment attempts
+- Omit the header if you want to allow duplicate payments intentionally
 
 ## Project Structure
 
@@ -236,6 +339,9 @@ src/
       PaymentStatus.cs
     Helpers/                         # Utility classes
       CardNumberExtensions.cs
+    Middleware/                      # Middleware components
+      GlobalExceptionHandler.cs      # Global exception handling with RFC 7807 Problem Details
+      ModelStateValidationMiddleware.cs  # Validation filter for clean controllers
     Models/                          # Request/Response DTOs
       Bank/                          # Bank integration models
         BankPaymentRequest.cs
@@ -245,6 +351,7 @@ src/
       Requests/                      # API request models
         PostPaymentRequest.cs
       Responses/                     # API response models
+        ApiResponse.cs               # Unified response wrapper
         GetPaymentResponse.cs
         PostPaymentResponse.cs
     PaymentGateway.Api.csproj        # Project file
@@ -262,25 +369,27 @@ src/
 
 test/
   PaymentGateway.Api.Tests/
-    Controllers/                     # Integration tests (39 tests)
+    Controllers/                     # Integration tests (123 tests)
       GetPaymentTests.cs             # 5 tests
       IdempotencyTests.cs            # 5 tests
-      PaymentsControllerTestBase.cs  # Base class for integration tests
-      PaymentValidationTests.cs      # 2 tests
-      PostPaymentTests.cs            # 11 tests
+      PaymentsControllerTestBase.cs  # Base class with ApiResponse helper methods
+      PaymentValidationTests.cs      # 11 tests
+      PostPaymentTests.cs            # 15 tests
       RejectedPaymentTests.cs        # 10 tests
     E2E/                             # End-to-end tests (11 tests)
-      PaymentGatewayE2ETests.cs      # 11 tests
-    Helpers/                         # Unit tests for helpers (8 tests)
+      PaymentGatewayE2ETests.cs      # 11 tests - updated for ApiResponse wrapper
+    Helpers/                         # Unit tests for helpers (17 tests)
       CardNumberExtensionsTests.cs
-    Models/                          # Unit tests for model validation (2 tests)
+    Middleware/                      # Unit tests for middleware (6 tests)
+      GlobalExceptionHandlerTests.cs # 6 tests
+    Models/                          # Unit tests for model validation (103 tests)
       PostPaymentRequestValidationTests.cs
     Repositories/                    # Unit tests for repositories (9 tests)
       PaymentsRepositoryTests.cs
     Services/                        # Unit tests for services (6 tests)
       BankClientTests.cs
     Usings.cs                        # Global using statements
-    Validation/                      # Unit tests for validators (7 tests)
+    Validation/                      # Unit tests for validators (16 tests)
       FutureExpiryDateAttributeTests.cs
     PaymentGateway.Api.Tests.csproj  # Test project file
 
@@ -293,8 +402,9 @@ docker-compose.test.yml              # Docker setup for E2E tests (with SQL Serv
 docker-compose.yml                   # Docker setup for bank simulator
 Dockerfile                           # API container image
 Dockerfile.test                      # Test runner container image
-INSTRUCTIONS.md                      # Original challenge instructions
+PaymentGateway.postman_collection.json  # Postman collection for API testing
 PaymentGateway.sln                   # Visual Studio solution file
+README.md                            # This file - comprehensive project documentation
 run-e2e-tests.ps1                    # E2E test runner script (Windows)
 run-e2e-tests.sh                     # E2E test runner script (Linux/Mac)
 ```
@@ -354,6 +464,24 @@ BankApiUrl="http://localhost:8080"
 
 # Logging
 Serilog__MinimumLevel__Default="Information"
+
+# Seq Server (Optional - for structured log viewing)
+Serilog__WriteTo__2__Args__serverUrl="http://localhost:5341"
+```
+
+### Optional: Seq for Log Visualization
+
+The application is configured to send logs to [Seq](https://datalust.co/seq) for structured log visualization and querying.
+
+**To use Seq:**
+1. Install Seq locally or run via Docker:
+   ```bash
+   docker run -d --name seq -e ACCEPT_EULA=Y -p 5341:80 datalust/seq:latest
+   ```
+2. Access Seq UI at `http://localhost:5341`
+3. View structured logs with filtering, querying, and visualization
+
+**Note**: Seq is optional. The application will continue logging to console and file even if Seq is not available.
 ```
 
 ## Technology Stack
@@ -373,7 +501,9 @@ Serilog__MinimumLevel__Default="Information"
 - **Authorization**: ASP.NET Core Authorization
 
 ### Logging
-- **Logging**: Serilog 9.0 (Console + File sinks)
+- **Logging**: Serilog 9.0 (Console + File + Seq sinks)
+- **Structured Logging**: All logs include contextual properties
+- **Log Visualization**: Optional Seq integration for advanced log querying
 
 ### Testing
 - **Framework**: NUnit 4.0
@@ -393,19 +523,26 @@ Serilog__MinimumLevel__Default="Information"
 2. **Custom Validation**: Attribute-based validation with FutureExpiryDateAttribute
 3. **Card Masking**: Only last 4 digits stored for PCI compliance consideration
 4. **Rejected Payment Audit**: Failed validations are stored for analytics
-5. **Disabled Auto-Validation**: Custom handling to store rejected payments before returning 400
+5. **Middleware-Based Validation**: ModelStateValidationFilter handles validation before controller actions
+
+### API Design & Error Handling
+6. **Unified Response Format**: ApiResponse<T> wrapper ensures consistent response structure across all endpoints
+7. **Global Exception Handler**: Centralized exception handling implementing RFC 7807 Problem Details
+8. **Semantic HTTP Status Codes**: Proper use of 200, 400, 404, 503 with descriptive error messages
+9. **Success/Error Flags**: Boolean `success` field for easy client-side handling
 
 ### Implemented Enhancements
-6. **SQL Server Persistence**: Production-grade database instead of in-memory storage
-7. **Async/Await Throughout**: All repository and service methods are async
-8. **API Key Authentication**: Simple but effective authentication for merchant identification
-9. **Idempotency First-Class**: Pre-validation check prevents duplicate processing
-10. **Structured Logging**: Serilog provides detailed observability
+10. **SQL Server Persistence**: Production-grade database instead of in-memory storage
+11. **Async/Await Throughout**: All repository and service methods are async
+12. **API Key Authentication**: Simple but effective authentication for merchant identification
+13. **Idempotency First-Class**: Pre-validation check prevents duplicate processing
+14. **Structured Logging**: Serilog provides detailed observability
 
 ### Testing Strategy
-11. **Test Pyramid**: 26 unit, 39 integration, 11 E2E tests (76 total)
-12. **Feature-Focused Tests**: Split monolithic test files for maintainability
-13. **Docker-Based E2E**: Real services (SQL Server, Bank API) in containers
+15. **Comprehensive Test Coverage**: 37 unit, 123 integration, 11 E2E tests (171 total)
+16. **Feature-Focused Tests**: Split monolithic test files for maintainability
+17. **Docker-Based E2E**: Real services (SQL Server, Bank API) in containers
+18. **Test Helper Methods**: Reusable ReadApiResponseAsync<T> for consistent test patterns
 
 
 ## License

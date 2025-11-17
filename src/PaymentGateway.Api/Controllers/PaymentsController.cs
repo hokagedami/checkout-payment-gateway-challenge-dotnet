@@ -25,40 +25,18 @@ public class PaymentsController : Controller
     }
 
     [HttpPost]
-    public async Task<ActionResult<PostPaymentResponse>> PostPaymentAsync(
+    public async Task<ActionResult<ApiResponse<PostPaymentResponse>>> PostPaymentAsync(
         [FromBody] PostPaymentRequest request,
         [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey)
     {
+        // Check for existing payment with same idempotency key
         if (!string.IsNullOrWhiteSpace(idempotencyKey))
         {
             var existingPayment = await _paymentsRepository.GetByIdempotencyKeyAsync(idempotencyKey);
             if (existingPayment != null)
             {
-                return Ok(existingPayment);
+                return Ok(ApiResponse<PostPaymentResponse>.SuccessResponse(existingPayment));
             }
-        }
-
-        if (!ModelState.IsValid)
-        {
-            var rejectedPayment = new PostPaymentResponse
-            {
-                Id = Guid.NewGuid(),
-                Status = PaymentStatus.Rejected,
-                CardNumberLastFour = request.CardNumber.ExtractLastFourDigits(),
-                ExpiryMonth = request.ExpiryMonth,
-                ExpiryYear = request.ExpiryYear,
-                Currency = request.Currency,
-                Amount = request.Amount,
-                IdempotencyKey = idempotencyKey
-            };
-
-            await _paymentsRepository.AddAsync(rejectedPayment);
-
-            return BadRequest(new
-            {
-                payment = rejectedPayment,
-                errors = ModelState
-            });
         }
 
         var bankRequest = new BankPaymentRequest
@@ -74,7 +52,7 @@ public class PaymentsController : Controller
 
         if (bankResponse == null)
         {
-            return StatusCode(503, new { error = "Unable to process payment at this time" });
+            return StatusCode(503, ApiResponse<PostPaymentResponse>.ErrorResponse("Unable to process payment at this time"));
         }
 
         var payment = new PostPaymentResponse
@@ -91,17 +69,17 @@ public class PaymentsController : Controller
 
         await _paymentsRepository.AddAsync(payment);
 
-        return Ok(payment);
+        return Ok(ApiResponse<PostPaymentResponse>.SuccessResponse(payment));
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<ActionResult<GetPaymentResponse?>> GetPaymentAsync(Guid id)
+    public async Task<ActionResult<ApiResponse<GetPaymentResponse>>> GetPaymentAsync(Guid id)
     {
         var payment = await _paymentsRepository.GetAsync(id);
 
         if (payment == null)
         {
-            return NotFound();
+            return NotFound(ApiResponse<GetPaymentResponse>.ErrorResponse("Payment not found"));
         }
 
         var response = new GetPaymentResponse
@@ -115,6 +93,6 @@ public class PaymentsController : Controller
             Amount = payment.Amount
         };
 
-        return Ok(response);
+        return Ok(ApiResponse<GetPaymentResponse>.SuccessResponse(response));
     }
 }

@@ -28,7 +28,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
         }
 
         var providedApiKey = value.ToString();
-        var validApiKeys = _configuration.GetSection("Authentication:ApiKeys").Get<string[]>() ?? Array.Empty<string>();
+        var validApiKeys = _configuration.GetSection("Authentication:ApiKeys").Get<string[]>() ?? [];
 
         if (!validApiKeys.Contains(providedApiKey))
         {

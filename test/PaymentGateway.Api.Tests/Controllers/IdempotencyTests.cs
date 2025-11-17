@@ -32,11 +32,11 @@ public class IdempotencyTests : PaymentsControllerTestBase
         // Act - First request
         client.DefaultRequestHeaders.Add("Idempotency-Key", idempotencyKey);
         var firstResponse = await client.PostAsJsonAsync("/api/Payments", request);
-        var firstPayment = await firstResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var firstPayment = await ReadApiResponseAsync<PostPaymentResponse>(firstResponse);
 
         // Act - Second request with same idempotency key
         var secondResponse = await client.PostAsJsonAsync("/api/Payments", request);
-        var secondPayment = await secondResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var secondPayment = await ReadApiResponseAsync<PostPaymentResponse>(secondResponse);
 
         // Assert
         Assert.That(firstResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -71,13 +71,13 @@ public class IdempotencyTests : PaymentsControllerTestBase
         // Act - First request with key 1
         client.DefaultRequestHeaders.Add("Idempotency-Key", "key-1");
         var firstResponse = await client.PostAsJsonAsync("/api/Payments", request);
-        var firstPayment = await firstResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var firstPayment = await ReadApiResponseAsync<PostPaymentResponse>(firstResponse);
 
         // Clear headers and add different key
         client.DefaultRequestHeaders.Remove("Idempotency-Key");
         client.DefaultRequestHeaders.Add("Idempotency-Key", "key-2");
         var secondResponse = await client.PostAsJsonAsync("/api/Payments", request);
-        var secondPayment = await secondResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var secondPayment = await ReadApiResponseAsync<PostPaymentResponse>(secondResponse);
 
         // Assert
         Assert.That(firstResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -111,10 +111,10 @@ public class IdempotencyTests : PaymentsControllerTestBase
 
         // Act - Two requests without idempotency key
         var firstResponse = await client.PostAsJsonAsync("/api/Payments", request);
-        var firstPayment = await firstResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var firstPayment = await ReadApiResponseAsync<PostPaymentResponse>(firstResponse);
 
         var secondResponse = await client.PostAsJsonAsync("/api/Payments", request);
-        var secondPayment = await secondResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var secondPayment = await ReadApiResponseAsync<PostPaymentResponse>(secondResponse);
 
         // Assert
         Assert.That(firstResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -159,7 +159,7 @@ public class IdempotencyTests : PaymentsControllerTestBase
 
         // Act - Second request with same idempotency key
         var secondResponse = await client.PostAsJsonAsync("/api/Payments", invalidRequest);
-        var secondPayment = await secondResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var secondPayment = await ReadApiResponseAsync<PostPaymentResponse>(secondResponse);
 
         // Assert
         Assert.That(firstResponse.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
@@ -188,11 +188,11 @@ public class IdempotencyTests : PaymentsControllerTestBase
         // Act - First request (will be declined)
         client.DefaultRequestHeaders.Add("Idempotency-Key", idempotencyKey);
         var firstResponse = await client.PostAsJsonAsync("/api/Payments", request);
-        var firstPayment = await firstResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var firstPayment = await ReadApiResponseAsync<PostPaymentResponse>(firstResponse);
 
         // Act - Second request with same idempotency key
         var secondResponse = await client.PostAsJsonAsync("/api/Payments", request);
-        var secondPayment = await secondResponse.Content.ReadFromJsonAsync<PostPaymentResponse>();
+        var secondPayment = await ReadApiResponseAsync<PostPaymentResponse>(secondResponse);
 
         // Assert
         Assert.That(firstResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
