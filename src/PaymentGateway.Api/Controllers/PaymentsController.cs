@@ -1,6 +1,5 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
 using PaymentGateway.Api.Enums;
 using PaymentGateway.Api.Helpers;
 using PaymentGateway.Api.Models.Bank;
@@ -12,7 +11,6 @@ using PaymentGateway.Api.Services;
 namespace PaymentGateway.Api.Controllers;
 
 [Authorize]
-[EnableRateLimiting("fixed")]
 [Route("api/[controller]")]
 [ApiController]
 public class PaymentsController : Controller
@@ -27,7 +25,6 @@ public class PaymentsController : Controller
     }
 
     [HttpPost]
-    [EnableRateLimiting("payments")]
     public async Task<ActionResult<PostPaymentResponse>> PostPaymentAsync(
         [FromBody] PostPaymentRequest request,
         [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey)

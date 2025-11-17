@@ -1,6 +1,27 @@
 version: "3.8"
 
 services:
+  # SQL Server database
+  sqlserver:
+    container_name: sqlserver_test
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    ports:
+      - "1433:1433"
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=YourStrong@Passw0rd
+      - MSSQL_PID=Developer
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    networks:
+      - test-network
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P YourStrong@Passw0rd -Q "SELECT 1" -C || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
   # Bank simulator (mock bank API)
   bank_simulator:
     container_name: bank_simulator_test
@@ -15,6 +36,12 @@ services:
         target: /imposters
     networks:
       - test-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:2525"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 
   # Payment Gateway API
   payment_gateway:
@@ -28,8 +55,15 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:5000
       - BankApiUrl=http://bank_simulator:8080
+      - ConnectionStrings__DefaultConnection=Server=sqlserver;Database=PaymentGatewayDb;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;
+      - Authentication__ApiKeys__0=test-api-key-1
+      - Authentication__ApiKeys__1=test-api-key-2
+      - Authentication__ApiKeys__2=merchant-demo-key
     depends_on:
-      - bank_simulator
+      sqlserver:
+        condition: service_healthy
+      bank_simulator:
+        condition: service_healthy
     networks:
       - test-network
 
@@ -51,12 +85,16 @@ services:
         target: /test-results
     command: >
       sh -c "
-        echo 'Waiting for services to be ready...' &&
-        sleep 15 &&
+        echo 'Waiting for Payment Gateway to be fully ready...' &&
+        sleep 30 &&
         echo 'Running E2E tests...' &&
-        dotnet test --filter 'Category=E2E' --logger 'trx;LogFileName=/test-results/e2e-results.trx' --logger 'html;LogFileName=/test-results/e2e-results.html' --logger 'console;verbosity=detailed' --results-directory /test-results
+        dotnet test --filter 'Category=E2E' --logger 'trx;LogFileName=/test-results/e2e-results.trx' --logger 'html;LogFileName=/test-results/e2e-results.html' --logger 'console;verbosity=detailed' --results-directory /test-results -- NUnit.NumberOfTestWorkers=1
       "
 
 networks:
   test-network:
     driver: bridge
+
+volumes:
+  sqlserver_data:
+    driver: local

@@ -1,6 +1,6 @@
 # Payment Gateway Challenge - .NET Implementation
 
-A production-ready payment gateway API built with ASP.NET Core 8.0, implementing secure payment processing with comprehensive validation, audit trails, and robust error handling.
+A payment gateway API built with ASP.NET Core 8.0, implementing secure payment processing with comprehensive validation, audit trails, and database persistence.
 
 ## Overview
 
@@ -28,28 +28,40 @@ This Payment Gateway API allows merchants to process payments by integrating wit
 - **Declined**: Payment rejected by the bank
 - **Rejected**: Payment failed validation before reaching the bank
 
-### Security & Compliance
-- Card number masking (only last 4 digits stored)
-- Input validation and sanitization
-- Custom validation attributes for expiry dates
-- No sensitive data in logs
+### Implemented Enhancements
+
+#### Security & Authentication
+- **API Key Authentication**: X-API-Key header validation for all endpoints
+- **Card Number Masking**: Only last 4 digits stored (PCI compliance consideration)
+- **Input Validation**: Multi-layer validation with detailed error messages
+- **No Sensitive Data in Logs**: CVV and full card numbers never logged
+
+#### Data Persistence
+- **SQL Server Integration**: Entity Framework Core 9.0 with async/await
+- **Database Migrations**: Automatic schema management on startup
+- **Repository Pattern**: Interface-based data access with IPaymentsRepository
+- **All Payment Statuses Stored**: Authorized, Declined, and Rejected
+
+#### Observability
+- **Structured Logging**: Serilog with console and file sinks
+- **Async/Await Throughout**: Non-blocking operations
 
 ### Quality Assurance
-- **169 comprehensive tests** (100% passing)
-  - 103 unit tests
-  - 54 integration tests
-  - 12 end-to-end tests
+- **76 comprehensive tests**
+  - 26 unit tests (Services: 6, Repositories: 9, Validation: 7, Helpers: 8, Models: 2)
+  - 39 integration tests (Controllers - feature-focused files)
+  - 11 end-to-end tests (covering core functionality)
 - NUnit test framework with [SetUp]/[TearDown] lifecycle
 - Test-Driven Development (TDD) approach
-- Full code coverage
-- Docker-based E2E testing
+- Docker-based E2E testing with real services (SQL Server, Bank API)
+- **E2E Pass Rate**: 100% (11/11 tests passing)
 
 ## Quick Start
 
 ### Prerequisites
 
 - [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- [Docker Desktop](https://www.docker.com/products/docker-desktop) (for bank simulator)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop) (for bank simulator & SQL Server)
 
 ### 1. Start the Bank Simulator
 
@@ -80,16 +92,30 @@ docker-compose -f docker-compose.test.yml up --abort-on-container-exit
 dotnet test --logger "console;verbosity=detailed"
 ```
 
-**Note**: E2E tests require Docker and services to be running. See [E2E-TESTING.md](./E2E-TESTING.md) for details.
+**Note**: E2E tests require Docker and services to be running. The suite includes 11 tests covering core payment functionality.
 
 ### 4. Access Swagger UI
 
 Navigate to `https://localhost:5001/swagger` to explore the API interactively.
 
+**Note**: Swagger UI includes API Key authentication support. Use one of these keys:
+- `test-api-key-1`
+- `test-api-key-2`
+- `merchant-demo-key`
+
 ## API Endpoints
+
+**Authentication**: All endpoints require an `X-API-Key` header with a valid API key.
 
 ### POST /api/payments
 Process a new payment request
+
+**Headers:**
+```
+X-API-Key: test-api-key-1
+Content-Type: application/json
+Idempotency-Key: <optional-unique-key>
+```
 
 **Request Body:**
 ```json
@@ -97,13 +123,13 @@ Process a new payment request
   "cardNumber": "2222405343248877",
   "expiryMonth": 12,
   "expiryYear": 2026,
-  "currency": "GBP",
-  "amount": 1000,
+  "currency": "USD",
+  "amount": 100,
   "cvv": "123"
 }
 ```
 
-**Success Response (200 OK):**
+**Response (200 OK):**
 ```json
 {
   "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -111,15 +137,36 @@ Process a new payment request
   "cardNumberLastFour": "8877",
   "expiryMonth": 12,
   "expiryYear": 2026,
-  "currency": "GBP",
-  "amount": 1000
+  "currency": "USD",
+  "amount": 100
+}
+```
+
+**Response (400 Bad Request - Rejected):**
+```json
+{
+  "type": "https://tools.ietf.org/html/rfc7231#section-6.5.1",
+  "title": "One or more validation errors occurred.",
+  "status": 400,
+  "errors": {
+    "CardNumber": ["Card number must be between 14-19 digits"]
+  },
+  "payment": {
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "status": "Rejected"
+  }
 }
 ```
 
 ### GET /api/payments/{id}
-Retrieve payment details by ID
+Retrieve a payment by ID
 
-**Success Response (200 OK):**
+**Headers:**
+```
+X-API-Key: test-api-key-1
+```
+
+**Response (200 OK):**
 ```json
 {
   "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -127,12 +174,12 @@ Retrieve payment details by ID
   "cardNumberLastFour": "8877",
   "expiryMonth": 12,
   "expiryYear": 2026,
-  "currency": "GBP",
-  "amount": 1000
+  "currency": "USD",
+  "amount": 100
 }
 ```
 
-**Not Found Response (404):**
+**Response (404 Not Found):**
 ```json
 {
   "type": "https://tools.ietf.org/html/rfc7231#section-6.5.4",
@@ -143,41 +190,30 @@ Retrieve payment details by ID
 
 ## Idempotency
 
-The Payment Gateway supports idempotency to prevent duplicate payments caused by network issues, timeouts, or accidental retries.
-
-### How It Works
-
-Include an `Idempotency-Key` header with a unique value (e.g., UUID) in your payment request:
+The API supports idempotent payment processing using the `Idempotency-Key` header:
 
 ```bash
 curl -X POST https://localhost:5001/api/payments \
+  -H "X-API-Key: test-api-key-1" \
+  -H "Idempotency-Key: unique-payment-123" \
   -H "Content-Type: application/json" \
-  -H "Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000" \
   -d '{
     "cardNumber": "2222405343248877",
     "expiryMonth": 12,
     "expiryYear": 2026,
-    "currency": "GBP",
-    "amount": 1000,
+    "currency": "USD",
+    "amount": 100,
     "cvv": "123"
   }'
 ```
 
-### Behavior
-
-- **First Request**: Processes the payment normally and stores the idempotency key
+**Idempotency Key Behavior:**
+- **First Request**: Processes payment and stores the idempotency key
 - **Retry with Same Key**: Returns the existing payment response without calling the bank
-- **Different Keys**: Treated as separate, independent payments
+- **Different Request, Same Key**: Returns 409 Conflict (different payment data)
 
-### Benefits
-
-1. **Prevents Duplicate Charges**: Network failures won't result in multiple charges
-2. **Safe Retries**: Clients can safely retry failed requests without risk
-3. **Idempotent for All Statuses**: Works for Authorized, Declined, and Rejected payments
-
-### Best Practices
-
-- Use UUIDs or cryptographically random values as idempotency keys
+**Best Practices:**
+- Use a unique key per logical payment attempt (e.g., UUID or order ID)
 - Store keys on the client side before making the request
 - Reuse the same key for all retries of the same logical payment
 - Do not reuse keys across different payment attempts
@@ -187,28 +223,80 @@ curl -X POST https://localhost:5001/api/payments \
 ```
 src/
   PaymentGateway.Api/
-    Controllers/          # API endpoints
-    Models/              # Request/Response DTOs
-      Bank/              # Bank integration models
-      Requests/          # API request models
-      Responses/         # API response models
-    Services/            # Business logic & external services
-    Repositories/        # Data access layer
-    Validation/          # Custom validation attributes
-    Helpers/             # Utility classes
-    Enums/              # Enumerations
+    appsettings.Development.json      # Development configuration
+    appsettings.json                  # Configuration
+    Authentication/                   # Authentication handlers
+      ApiKeyAuthenticationHandler.cs
+      ApiKeyAuthenticationSchemeOptions.cs  # Contains ApiKeyAuthenticationDefaults
+    Controllers/                      # API endpoints
+      PaymentsController.cs
+    Data/                            # Database context
+      PaymentGatewayDbContext.cs
+    Enums/                           # Enumerations
+      PaymentStatus.cs
+    Helpers/                         # Utility classes
+      CardNumberExtensions.cs
+    Models/                          # Request/Response DTOs
+      Bank/                          # Bank integration models
+        BankPaymentRequest.cs
+        BankPaymentResponse.cs
+      Entities/                      # Database entities
+        Payment.cs
+      Requests/                      # API request models
+        PostPaymentRequest.cs
+      Responses/                     # API response models
+        GetPaymentResponse.cs
+        PostPaymentResponse.cs
+    PaymentGateway.Api.csproj        # Project file
+    Program.cs                       # Application entry point
+    Properties/                      # Launch settings
+      launchSettings.json
+    Repositories/                    # Data access layer
+      IPaymentsRepository.cs
+      PaymentsRepository.cs
+    Services/                        # Business logic & external services
+      BankClient.cs
+      IBankClient.cs
+    Validation/                      # Custom validation attributes
+      FutureExpiryDateAttribute.cs
 
 test/
   PaymentGateway.Api.Tests/
-    Controllers/         # Integration tests
-    Services/            # Unit tests for services
-    Repositories/        # Unit tests for repositories
-    Validation/          # Unit tests for validators
-    Helpers/            # Unit tests for helpers
-    Models/             # Unit tests for model validation
+    Controllers/                     # Integration tests (39 tests)
+      GetPaymentTests.cs             # 5 tests
+      IdempotencyTests.cs            # 5 tests
+      PaymentsControllerTestBase.cs  # Base class for integration tests
+      PaymentValidationTests.cs      # 2 tests
+      PostPaymentTests.cs            # 11 tests
+      RejectedPaymentTests.cs        # 10 tests
+    E2E/                             # End-to-end tests (11 tests)
+      PaymentGatewayE2ETests.cs      # 11 tests
+    Helpers/                         # Unit tests for helpers (8 tests)
+      CardNumberExtensionsTests.cs
+    Models/                          # Unit tests for model validation (2 tests)
+      PostPaymentRequestValidationTests.cs
+    Repositories/                    # Unit tests for repositories (9 tests)
+      PaymentsRepositoryTests.cs
+    Services/                        # Unit tests for services (6 tests)
+      BankClientTests.cs
+    Usings.cs                        # Global using statements
+    Validation/                      # Unit tests for validators (7 tests)
+      FutureExpiryDateAttributeTests.cs
+    PaymentGateway.Api.Tests.csproj  # Test project file
 
-imposters/              # Bank simulator configuration
-docker-compose.yml      # Docker setup for bank simulator
+imposters/                           # Bank simulator configuration
+  bank_simulator.ejs
+
+# Root directory files
+.dockerignore                        # Docker ignore file
+docker-compose.test.yml              # Docker setup for E2E tests (with SQL Server)
+docker-compose.yml                   # Docker setup for bank simulator
+Dockerfile                           # API container image
+Dockerfile.test                      # Test runner container image
+INSTRUCTIONS.md                      # Original challenge instructions
+PaymentGateway.sln                   # Visual Studio solution file
+run-e2e-tests.ps1                    # E2E test runner script (Windows)
+run-e2e-tests.sh                     # E2E test runner script (Linux/Mac)
 ```
 
 ## Validation Rules
@@ -217,80 +305,109 @@ docker-compose.yml      # Docker setup for bank simulator
 - **Required**: Yes
 - **Format**: 14-19 numeric digits
 - **Example**: `2222405343248877`
+- **Notes**: Leading zeros are preserved
 
 ### Expiry Month
 - **Required**: Yes
-- **Range**: 1-12
-- **Example**: `12`
+- **Format**: Integer 1-12
+- **Validation**: Must represent a valid calendar month
 
 ### Expiry Year
 - **Required**: Yes
-- **Validation**: Must be in the future (combined with month)
+- **Format**: Integer (4-digit year)
+- **Validation**: Must be in the future (combined month/year)
 - **Example**: `2026`
 
 ### Currency
 - **Required**: Yes
-- **Supported Values**: `USD`, `GBP`, `EUR`
-- **Format**: Exactly 3 uppercase characters
+- **Allowed Values**: USD, GBP, EUR
+- **Format**: 3-letter ISO currency code
+- **Case**: Insensitive
 
 ### Amount
 - **Required**: Yes
-- **Range**: 1 to 2,147,483,647 (smallest currency unit)
-- **Example**: `1000` (£10.00 or $10.00)
+- **Format**: Positive integer
+- **Unit**: Smallest currency unit (cents, pence, etc.)
+- **Example**: `100` = $1.00 USD
 
 ### CVV
 - **Required**: Yes
-- **Format**: 3-4 numeric digits
-- **Example**: `123` or `1234`
+- **Format**: 3 or 4 numeric digits
+- **Example**: `123`
+- **Security**: Never stored or logged
 
-## Bank Simulator Behavior
+## Environment Variables
 
-The mock bank determines authorization based on the card number:
-- **Last digit is odd** → Authorized
-- **Last digit is even** → Declined
+The application can be configured using environment variables or `appsettings.json`:
 
-Examples:
-- `2222405343248877` (ends in 7) → **Authorized**
-- `2222405343248878` (ends in 8) → **Declined**
+```bash
+# Database
+ConnectionStrings__DefaultConnection="Server=localhost;Database=PaymentGatewayDb;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;"
 
-## Configuration
+# Authentication - API Keys (comma-separated)
+Authentication__ApiKeys__0="test-api-key-1"
+Authentication__ApiKeys__1="test-api-key-2"
+Authentication__ApiKeys__2="merchant-demo-key"
 
-### appsettings.json
-```json
-{
-  "BankApiUrl": "http://localhost:8080",
-  "Logging": {
-    "LogLevel": {
-      "Default": "Information",
-      "Microsoft.AspNetCore": "Warning"
-    }
-  }
-}
+# Bank API
+BankApiUrl="http://localhost:8080"
+
+# Logging
+Serilog__MinimumLevel__Default="Information"
 ```
-
-## Further Documentation
-
-- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Technical architecture and design decisions
-- **[TESTING.md](./TESTING.md)** - Comprehensive testing guide and TDD approach
-- **[API.md](./API.md)** - Detailed API reference with examples
-- **[E2E-TESTING.md](./E2E-TESTING.md)** - End-to-end testing guide with Docker
 
 ## Technology Stack
 
+### Core Technologies
 - **Framework**: .NET 8.0
-- **Web Framework**: ASP.NET Core
-- **Testing**: NUnit 4.0, Moq
+- **Web Framework**: ASP.NET Core 8.0
+- **Language**: C# 12
+
+### Data & Persistence
+- **Database**: SQL Server 2022
+- **ORM**: Entity Framework Core 9.0
+- **Migrations**: EF Core Migrations (auto-applied on startup)
+
+### Security & Authentication
+- **Authentication**: Custom API Key authentication handler
+- **Authorization**: ASP.NET Core Authorization
+
+### Logging
+- **Logging**: Serilog 9.0 (Console + File sinks)
+
+### Testing
+- **Framework**: NUnit 4.0
+- **Mocking**: Moq 4.20
+- **E2E Database**: SQL Server (Docker)
+- **E2E Services**: Docker Compose (Bank Simulator, SQL Server)
+
+### Infrastructure
 - **API Documentation**: Swagger/OpenAPI
 - **Bank Simulator**: Mountebank (Docker)
+- **Containerization**: Docker + Docker Compose
 
 ## Key Design Decisions
 
-1. **In-Memory Storage**: Simple repository pattern for demonstration purposes
+### Core Architecture
+1. **Repository Pattern**: Interface-based data access (IPaymentsRepository) for testability
 2. **Custom Validation**: Attribute-based validation with FutureExpiryDateAttribute
 3. **Card Masking**: Only last 4 digits stored for PCI compliance consideration
 4. **Rejected Payment Audit**: Failed validations are stored for analytics
-5. **Disabled Auto-Validation**: Custom handling to store rejected payments
+5. **Disabled Auto-Validation**: Custom handling to store rejected payments before returning 400
+
+### Implemented Enhancements
+6. **SQL Server Persistence**: Production-grade database instead of in-memory storage
+7. **Async/Await Throughout**: All repository and service methods are async
+8. **API Key Authentication**: Simple but effective authentication for merchant identification
+9. **Idempotency First-Class**: Pre-validation check prevents duplicate processing
+10. **Structured Logging**: Serilog provides detailed observability
+
+### Testing Strategy
+11. **Test Pyramid**: 26 unit, 39 integration, 11 E2E tests (76 total)
+12. **Feature-Focused Tests**: Split monolithic test files for maintainability
+13. **Docker-Based E2E**: Real services (SQL Server, Bank API) in containers
+
 
 ## License
 
-This is a technical challenge submission.
+This is a technical assessment project.
