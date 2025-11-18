@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using PaymentGateway.Api.Data;
 using PaymentGateway.Api.Enums;
 using PaymentGateway.Api.Models;
 using PaymentGateway.Api.Models.Responses;
@@ -8,11 +10,21 @@ namespace PaymentGateway.Api.Tests.Repositories;
 [TestFixture]
 public class PaymentsRepositoryTests
 {
+    private PaymentGatewayDbContext CreateInMemoryContext()
+    {
+        var options = new DbContextOptionsBuilder<PaymentGatewayDbContext>()
+            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+            .Options;
+
+        return new PaymentGatewayDbContext(options);
+    }
+
     [Test]
-    public void Add_StoresPaymentSuccessfully()
+    public async Task Add_StoresPaymentSuccessfully()
     {
         // Arrange
-        var repository = new PaymentsRepository();
+        var context = CreateInMemoryContext();
+        var repository = new PaymentsRepository(context);
         var payment = new PostPaymentResponse
         {
             Id = Guid.NewGuid(),
@@ -25,10 +37,10 @@ public class PaymentsRepositoryTests
         };
 
         // Act
-        repository.Add(payment);
+        await repository.AddAsync(payment);
 
         // Assert
-        var retrieved = repository.Get(payment.Id);
+        var retrieved = await repository.GetAsync(payment.Id);
         Assert.That(retrieved, Is.Not.Null);
         Assert.That(retrieved.Id, Is.EqualTo(payment.Id));
         Assert.That(retrieved.Status, Is.EqualTo(payment.Status));
@@ -36,10 +48,11 @@ public class PaymentsRepositoryTests
     }
 
     [Test]
-    public void Get_WithValidId_ReturnsPayment()
+    public async Task Get_WithValidId_ReturnsPayment()
     {
         // Arrange
-        var repository = new PaymentsRepository();
+        var context = CreateInMemoryContext();
+        var repository = new PaymentsRepository(context);
         var paymentId = Guid.NewGuid();
         var payment = new PostPaymentResponse
         {
@@ -52,10 +65,10 @@ public class PaymentsRepositoryTests
             Amount = 2500
         };
 
-        repository.Add(payment);
+        await repository.AddAsync(payment);
 
         // Act
-        var result = repository.Get(paymentId);
+        var result = await repository.GetAsync(paymentId);
 
         // Assert
         Assert.That(result, Is.Not.Null);
@@ -69,24 +82,26 @@ public class PaymentsRepositoryTests
     }
 
     [Test]
-    public void Get_WithInvalidId_ReturnsNull()
+    public async Task Get_WithInvalidId_ReturnsNull()
     {
         // Arrange
-        var repository = new PaymentsRepository();
+        var context = CreateInMemoryContext();
+        var repository = new PaymentsRepository(context);
         var nonExistentId = Guid.NewGuid();
 
         // Act
-        var result = repository.Get(nonExistentId);
+        var result = await repository.GetAsync(nonExistentId);
 
         // Assert
         Assert.That(result, Is.Null);
     }
 
     [Test]
-    public void Add_MultiplePayments_AllAreStored()
+    public async Task Add_MultiplePayments_AllAreStored()
     {
         // Arrange
-        var repository = new PaymentsRepository();
+        var context = CreateInMemoryContext();
+        var repository = new PaymentsRepository(context);
         var payment1 = new PostPaymentResponse
         {
             Id = Guid.NewGuid(),
@@ -121,14 +136,14 @@ public class PaymentsRepositoryTests
         };
 
         // Act
-        repository.Add(payment1);
-        repository.Add(payment2);
-        repository.Add(payment3);
+        await repository.AddAsync(payment1);
+        await repository.AddAsync(payment2);
+        await repository.AddAsync(payment3);
 
         // Assert
-        var retrieved1 = repository.Get(payment1.Id);
-        var retrieved2 = repository.Get(payment2.Id);
-        var retrieved3 = repository.Get(payment3.Id);
+        var retrieved1 = await repository.GetAsync(payment1.Id);
+        var retrieved2 = await repository.GetAsync(payment2.Id);
+        var retrieved3 = await repository.GetAsync(payment3.Id);
 
         Assert.That(retrieved1, Is.Not.Null);
         Assert.That(retrieved2, Is.Not.Null);
@@ -140,14 +155,15 @@ public class PaymentsRepositoryTests
     }
 
     [Test]
-    public void Get_AfterMultipleAdds_ReturnsCorrectPayment()
+    public async Task Get_AfterMultipleAdds_ReturnsCorrectPayment()
     {
         // Arrange
-        var repository = new PaymentsRepository();
+        var context = CreateInMemoryContext();
+        var repository = new PaymentsRepository(context);
         var targetId = Guid.NewGuid();
 
         // Add some payments
-        repository.Add(new PostPaymentResponse
+        await repository.AddAsync(new PostPaymentResponse
         {
             Id = Guid.NewGuid(),
             Status = PaymentStatus.Authorized,
@@ -169,10 +185,10 @@ public class PaymentsRepositoryTests
             Currency = "EUR",
             Amount = 5000
         };
-        repository.Add(targetPayment);
+        await repository.AddAsync(targetPayment);
 
         // Add more payments
-        repository.Add(new PostPaymentResponse
+        await repository.AddAsync(new PostPaymentResponse
         {
             Id = Guid.NewGuid(),
             Status = PaymentStatus.Authorized,
@@ -184,7 +200,7 @@ public class PaymentsRepositoryTests
         });
 
         // Act
-        var result = repository.Get(targetId);
+        var result = await repository.GetAsync(targetId);
 
         // Assert
         Assert.That(result, Is.Not.Null);
@@ -194,23 +210,13 @@ public class PaymentsRepositoryTests
     }
 
     [Test]
-    public void Payments_IsInitiallyEmpty()
-    {
-        // Arrange & Act
-        var repository = new PaymentsRepository();
-
-        // Assert
-        Assert.That(repository.Payments, Is.Empty);
-    }
-
-    [Test]
-    public void Add_IncrementsPaymentCount()
+    public async Task GetByIdempotencyKey_WithValidKey_ReturnsPayment()
     {
         // Arrange
-        var repository = new PaymentsRepository();
-
-        // Act
-        repository.Add(new PostPaymentResponse
+        var context = CreateInMemoryContext();
+        var repository = new PaymentsRepository(context);
+        var idempotencyKey = "test-key-123";
+        var payment = new PostPaymentResponse
         {
             Id = Guid.NewGuid(),
             Status = PaymentStatus.Authorized,
@@ -218,21 +224,128 @@ public class PaymentsRepositoryTests
             ExpiryMonth = 12,
             ExpiryYear = 2026,
             Currency = "GBP",
-            Amount = 100
+            Amount = 1000,
+            IdempotencyKey = idempotencyKey
+        };
+
+        await repository.AddAsync(payment);
+
+        // Act
+        var result = await repository.GetByIdempotencyKeyAsync(idempotencyKey);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.Id, Is.EqualTo(payment.Id));
+        Assert.That(result.IdempotencyKey, Is.EqualTo(idempotencyKey));
+        Assert.That(result.Status, Is.EqualTo(PaymentStatus.Authorized));
+    }
+
+    [Test]
+    public async Task GetByIdempotencyKey_WithInvalidKey_ReturnsNull()
+    {
+        // Arrange
+        var context = CreateInMemoryContext();
+        var repository = new PaymentsRepository(context);
+        var payment = new PostPaymentResponse
+        {
+            Id = Guid.NewGuid(),
+            Status = PaymentStatus.Authorized,
+            CardNumberLastFour = "1234",
+            ExpiryMonth = 12,
+            ExpiryYear = 2026,
+            Currency = "GBP",
+            Amount = 1000,
+            IdempotencyKey = "key-1"
+        };
+
+        await repository.AddAsync(payment);
+
+        // Act
+        var result = await repository.GetByIdempotencyKeyAsync("non-existent-key");
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task GetByIdempotencyKey_WithNullIdempotencyKey_ReturnsNull()
+    {
+        // Arrange
+        var context = CreateInMemoryContext();
+        var repository = new PaymentsRepository(context);
+        var payment = new PostPaymentResponse
+        {
+            Id = Guid.NewGuid(),
+            Status = PaymentStatus.Authorized,
+            CardNumberLastFour = "1234",
+            ExpiryMonth = 12,
+            ExpiryYear = 2026,
+            Currency = "GBP",
+            Amount = 1000,
+            IdempotencyKey = null
+        };
+
+        await repository.AddAsync(payment);
+
+        // Act
+        var result = await repository.GetByIdempotencyKeyAsync("some-key");
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task GetByIdempotencyKey_WithMultiplePayments_ReturnsCorrectOne()
+    {
+        // Arrange
+        var context = CreateInMemoryContext();
+        var repository = new PaymentsRepository(context);
+        var targetKey = "target-key";
+
+        await repository.AddAsync(new PostPaymentResponse
+        {
+            Id = Guid.NewGuid(),
+            Status = PaymentStatus.Authorized,
+            CardNumberLastFour = "1111",
+            ExpiryMonth = 1,
+            ExpiryYear = 2026,
+            Currency = "GBP",
+            Amount = 100,
+            IdempotencyKey = "key-1"
         });
 
-        repository.Add(new PostPaymentResponse
+        var targetPayment = new PostPaymentResponse
         {
             Id = Guid.NewGuid(),
             Status = PaymentStatus.Declined,
-            CardNumberLastFour = "5678",
+            CardNumberLastFour = "9999",
+            ExpiryMonth = 12,
+            ExpiryYear = 2026,
+            Currency = "EUR",
+            Amount = 5000,
+            IdempotencyKey = targetKey
+        };
+        await repository.AddAsync(targetPayment);
+
+        await repository.AddAsync(new PostPaymentResponse
+        {
+            Id = Guid.NewGuid(),
+            Status = PaymentStatus.Authorized,
+            CardNumberLastFour = "2222",
             ExpiryMonth = 6,
             ExpiryYear = 2027,
             Currency = "USD",
-            Amount = 200
+            Amount = 300,
+            IdempotencyKey = "key-2"
         });
 
+        // Act
+        var result = await repository.GetByIdempotencyKeyAsync(targetKey);
+
         // Assert
-        Assert.That(repository.Payments.Count, Is.EqualTo(2));
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.Id, Is.EqualTo(targetPayment.Id));
+        Assert.That(result.CardNumberLastFour, Is.EqualTo("9999"));
+        Assert.That(result.IdempotencyKey, Is.EqualTo(targetKey));
     }
 }

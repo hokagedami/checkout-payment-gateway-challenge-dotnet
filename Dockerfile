@@ -21,6 +21,9 @@ WORKDIR /app
 EXPOSE 5000
 EXPOSE 5001
 
+# Install curl for health checks
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
 # Copy published files
 COPY --from=publish /app/publish .
 

@@ -1,0 +1,1064 @@
+{
+	"info": {
+		"_postman_id": "payment-gateway-api-collection",
+		"name": "Payment Gateway API",
+		"description": "API collection for testing the Payment Gateway with authentication, payment processing, and retrieval endpoints.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Process Payment",
+			"item": [
+				{
+					"name": "POST Payment - Authorized (Odd Card)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response indicates success\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"});",
+									"",
+									"pm.test(\"Payment status is Authorized\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data.status).to.eql(\"Authorized\");",
+									"});",
+									"",
+									"pm.test(\"Response contains payment ID\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data.id).to.exist;",
+									"});",
+									"",
+									"// Save payment ID for retrieval test",
+									"var jsonData = pm.response.json();",
+									"pm.environment.set(\"lastPaymentId\", jsonData.data.id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{apiKey}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"cardNumber\": \"2222405343248877\",\n  \"expiryMonth\": 12,\n  \"expiryYear\": 2026,\n  \"currency\": \"USD\",\n  \"amount\": 100,\n  \"cvv\": \"123\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/payments",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"payments"
+							]
+						},
+						"description": "Process a payment with a card ending in odd number (7) - should be Authorized by the bank simulator."
+					},
+					"response": []
+				},
+				{
+					"name": "POST Payment - Declined (Even Card)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response indicates success\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"});",
+									"",
+									"pm.test(\"Payment status is Declined\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data.status).to.eql(\"Declined\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{apiKey}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"cardNumber\": \"2222405343248878\",\n  \"expiryMonth\": 4,\n  \"expiryYear\": 2026,\n  \"currency\": \"GBP\",\n  \"amount\": 200,\n  \"cvv\": \"456\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/payments",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"payments"
+							]
+						},
+						"description": "Process a payment with a card ending in even number (8) - should be Declined by the bank simulator."
+					},
+					"response": []
+				},
+				{
+					"name": "POST Payment - Rejected (Invalid Card)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 400\", function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test(\"Response indicates failure\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.false;",
+									"});",
+									"",
+									"pm.test(\"Payment status is Rejected\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data.status).to.eql(\"Rejected\");",
+									"});",
+									"",
+									"pm.test(\"Contains validation errors\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.errors).to.exist;",
+									"    pm.expect(jsonData.errors).to.be.an('array');",
+									"    pm.expect(jsonData.errors.length).to.be.greaterThan(0);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{apiKey}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"cardNumber\": \"123\",\n  \"expiryMonth\": 12,\n  \"expiryYear\": 2026,\n  \"currency\": \"EUR\",\n  \"amount\": 150,\n  \"cvv\": \"789\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/payments",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"payments"
+							]
+						},
+						"description": "Process a payment with invalid card number (too short) - should be Rejected before calling the bank."
+					},
+					"response": []
+				},
+				{
+					"name": "POST Payment - With Idempotency Key",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response indicates success\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"});",
+									"",
+									"pm.test(\"Response contains payment ID\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data.id).to.exist;",
+									"});",
+									"",
+									"// Save response for idempotency test",
+									"pm.environment.set(\"idempotentPaymentId\", pm.response.json().data.id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{apiKey}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Idempotency-Key",
+								"value": "test-idempotency-same-key",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"cardNumber\": \"4532015112830366\",\n  \"expiryMonth\": 6,\n  \"expiryYear\": 2027,\n  \"currency\": \"USD\",\n  \"amount\": 500,\n  \"cvv\": \"999\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/payments",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"payments"
+							]
+						},
+						"description": "Process a payment with an idempotency key. Retrying with the same key will return the same payment without calling the bank."
+					},
+					"response": []
+				},
+				{
+					"name": "POST Payment - Retry with Same Idempotency Key",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response indicates success\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"});",
+									"",
+									"pm.test(\"Returns same payment ID\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data.id).to.eql(pm.environment.get(\"idempotentPaymentId\"));",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Use the same idempotency key from the previous request",
+									"// Note: You need to manually set this to match the previous request's key"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{apiKey}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Idempotency-Key",
+								"value": "test-idempotency-same-key",
+								"type": "text",
+								"description": "Use same key as previous request to test idempotency"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"cardNumber\": \"4532015112830366\",\n  \"expiryMonth\": 6,\n  \"expiryYear\": 2027,\n  \"currency\": \"USD\",\n  \"amount\": 500,\n  \"cvv\": \"999\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/payments",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"payments"
+							]
+						},
+						"description": "Retry the same payment with the same idempotency key - should return the existing payment without calling the bank."
+					},
+					"response": []
+				},
+				{
+					"name": "POST Payment - Without Idempotency Key (Creates Multiple Payments)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response indicates success\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"});",
+									"",
+									"pm.test(\"Response contains payment ID\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data.id).to.exist;",
+									"});",
+									"",
+									"pm.test(\"Payment has no idempotency key\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data.idempotencyKey).to.be.null;",
+									"});",
+									"",
+									"// Save first payment ID",
+									"if (!pm.environment.get(\"firstPaymentWithoutKey\")) {",
+									"    pm.environment.set(\"firstPaymentWithoutKey\", pm.response.json().data.id);",
+									"} else {",
+									"    // If this is the second request, verify it created a different payment",
+									"    pm.test(\"Creates different payment without idempotency key\", function () {",
+									"        var jsonData = pm.response.json();",
+									"        var firstId = pm.environment.get(\"firstPaymentWithoutKey\");",
+									"        pm.expect(jsonData.data.id).to.not.eql(firstId);",
+									"    });",
+									"    // Clean up",
+									"    pm.environment.unset(\"firstPaymentWithoutKey\");",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{apiKey}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"cardNumber\": \"2222405343248875\",\n  \"expiryMonth\": 8,\n  \"expiryYear\": 2027,\n  \"currency\": \"GBP\",\n  \"amount\": 300,\n  \"cvv\": \"789\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/payments",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"payments"
+							]
+						},
+						"description": "Process payments without an idempotency key. Run this request twice to verify that two different payments are created (not idempotent behavior)."
+					},
+					"response": []
+				},
+				{
+					"name": "POST Payment - Multiple Currencies (EUR)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response indicates success\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"});",
+									"",
+									"pm.test(\"Payment is declined (card ends in even number)\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data.status).to.eql(\"Declined\");",
+									"});",
+									"",
+									"pm.test(\"Currency is EUR\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data.currency).to.eql(\"EUR\");",
+									"});",
+									"",
+									"pm.test(\"Amount is correct\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data.amount).to.eql(750);",
+									"});",
+									"",
+									"pm.test(\"Card last four digits are correct\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data.cardNumberLastFour).to.eql(\"0004\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{apiKey}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"cardNumber\": \"5500000000000004\",\n  \"expiryMonth\": 3,\n  \"expiryYear\": 2028,\n  \"currency\": \"EUR\",\n  \"amount\": 750,\n  \"cvv\": \"321\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/payments",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"payments"
+							]
+						},
+						"description": "Test EUR currency support"
+					},
+					"response": []
+				},
+				{
+					"name": "POST Payment - Leading Zeros Preserved",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response indicates success\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"});",
+									"",
+									"pm.test(\"Last 4 digits preserved with leading zeros\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data.cardNumberLastFour).to.eql(\"0001\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{apiKey}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"cardNumber\": \"22224053430001\",\n  \"expiryMonth\": 12,\n  \"expiryYear\": 2026,\n  \"currency\": \"GBP\",\n  \"amount\": 1000,\n  \"cvv\": \"111\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/payments",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"payments"
+							]
+						},
+						"description": "Test that card numbers with leading zeros in last 4 digits are preserved correctly."
+					},
+					"response": []
+				}
+			],
+			"description": "Endpoints for processing payments with various scenarios"
+		},
+		{
+			"name": "Retrieve Payment",
+			"item": [
+				{
+					"name": "GET Payment - Valid ID",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response indicates success\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"});",
+									"",
+									"pm.test(\"Response contains payment details\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data.id).to.exist;",
+									"    pm.expect(jsonData.data.status).to.exist;",
+									"    pm.expect(jsonData.data.cardNumberLastFour).to.exist;",
+									"    pm.expect(jsonData.data.amount).to.exist;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{apiKey}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/payments/{{lastPaymentId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"payments",
+								"{{lastPaymentId}}"
+							]
+						},
+						"description": "Retrieve a payment by its ID. The ID is stored from the last POST request."
+					},
+					"response": []
+				},
+				{
+					"name": "GET Payment - Invalid ID (Not Found)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 404\", function () {",
+									"    pm.response.to.have.status(404);",
+									"});",
+									"",
+									"pm.test(\"Response indicates failure\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.false;",
+									"});",
+									"",
+									"pm.test(\"Contains error message\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.errors).to.exist;",
+									"    pm.expect(jsonData.errors).to.be.an('array');",
+									"    pm.expect(jsonData.errors).to.include('Payment not found');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{apiKey}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/payments/00000000-0000-0000-0000-000000000000",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"payments",
+								"00000000-0000-0000-0000-000000000000"
+							]
+						},
+						"description": "Attempt to retrieve a payment with an ID that doesn't exist - should return 404."
+					},
+					"response": []
+				}
+			],
+			"description": "Endpoints for retrieving payment details"
+		},
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "POST Payment - No API Key (Unauthorized)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 401\", function () {",
+									"    pm.response.to.have.status(401);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"cardNumber\": \"2222405343248877\",\n  \"expiryMonth\": 12,\n  \"expiryYear\": 2026,\n  \"currency\": \"USD\",\n  \"amount\": 100,\n  \"cvv\": \"123\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/payments",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"payments"
+							]
+						},
+						"description": "Attempt to process a payment without API key - should return 401 Unauthorized."
+					},
+					"response": []
+				},
+				{
+					"name": "POST Payment - Invalid API Key",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 401\", function () {",
+									"    pm.response.to.have.status(401);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "invalid-key-12345",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"cardNumber\": \"2222405343248877\",\n  \"expiryMonth\": 12,\n  \"expiryYear\": 2026,\n  \"currency\": \"USD\",\n  \"amount\": 100,\n  \"cvv\": \"123\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/payments",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"payments"
+							]
+						},
+						"description": "Attempt to process a payment with invalid API key - should return 401 Unauthorized."
+					},
+					"response": []
+				},
+				{
+					"name": "GET Payment - No API Key",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 401\", function () {",
+									"    pm.response.to.have.status(401);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/payments/{{lastPaymentId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"payments",
+								"{{lastPaymentId}}"
+							]
+						},
+						"description": "Attempt to retrieve a payment without API key - should return 401 Unauthorized."
+					},
+					"response": []
+				}
+			],
+			"description": "Test authentication scenarios"
+		},
+		{
+			"name": "Validation",
+			"item": [
+				{
+					"name": "POST Payment - Invalid Expiry Date",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 400\", function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test(\"Response indicates failure\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.false;",
+									"});",
+									"",
+									"pm.test(\"Contains validation errors\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.errors).to.exist;",
+									"    pm.expect(jsonData.errors).to.be.an('array');",
+									"    pm.expect(jsonData.errors.length).to.be.greaterThan(0);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{apiKey}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"cardNumber\": \"2222405343248877\",\n  \"expiryMonth\": 1,\n  \"expiryYear\": 2020,\n  \"currency\": \"USD\",\n  \"amount\": 100,\n  \"cvv\": \"123\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/payments",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"payments"
+							]
+						},
+						"description": "Test validation with expired card - should be rejected."
+					},
+					"response": []
+				},
+				{
+					"name": "POST Payment - Invalid Currency",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 400\", function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test(\"Response indicates failure\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.false;",
+									"});",
+									"",
+									"pm.test(\"Contains validation errors\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.errors).to.exist;",
+									"    pm.expect(jsonData.errors).to.be.an('array');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{apiKey}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"cardNumber\": \"2222405343248877\",\n  \"expiryMonth\": 12,\n  \"expiryYear\": 2026,\n  \"currency\": \"JPY\",\n  \"amount\": 100,\n  \"cvv\": \"123\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/payments",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"payments"
+							]
+						},
+						"description": "Test validation with unsupported currency (only USD, GBP, EUR supported) - should be rejected."
+					},
+					"response": []
+				},
+				{
+					"name": "POST Payment - Invalid CVV",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 400\", function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test(\"Response indicates failure\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.false;",
+									"});",
+									"",
+									"pm.test(\"Contains validation errors\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.errors).to.exist;",
+									"    pm.expect(jsonData.errors).to.be.an('array');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{apiKey}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"cardNumber\": \"2222405343248877\",\n  \"expiryMonth\": 12,\n  \"expiryYear\": 2026,\n  \"currency\": \"USD\",\n  \"amount\": 100,\n  \"cvv\": \"12\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/payments",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"payments"
+							]
+						},
+						"description": "Test validation with invalid CVV (too short) - should be rejected."
+					},
+					"response": []
+				},
+				{
+					"name": "POST Payment - Missing Required Fields",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 400\", function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test(\"Response indicates failure\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.false;",
+									"});",
+									"",
+									"pm.test(\"Contains validation errors\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.errors).to.exist;",
+									"    pm.expect(jsonData.errors).to.be.an('array');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{apiKey}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"cardNumber\": \"2222405343248877\",\n  \"expiryMonth\": 12,\n  \"currency\": \"USD\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/payments",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"payments"
+							]
+						},
+						"description": "Test validation with missing required fields - should be rejected."
+					},
+					"response": []
+				}
+			],
+			"description": "Test various validation scenarios"
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "https://localhost:7092",
+			"type": "string"
+		},
+		{
+			"key": "apiKey",
+			"value": "test-api-key-1",
+			"type": "string"
+		},
+		{
+			"key": "lastPaymentId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "idempotentPaymentId",
+			"value": "",
+			"type": "string"
+		}
+	]
+}
