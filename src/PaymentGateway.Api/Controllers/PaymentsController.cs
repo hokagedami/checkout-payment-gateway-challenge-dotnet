@@ -1,11 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using PaymentGateway.Api.Enums;
-using PaymentGateway.Api.Helpers;
-using PaymentGateway.Api.Models.Bank;
 using PaymentGateway.Api.Models.Requests;
 using PaymentGateway.Api.Models.Responses;
-using PaymentGateway.Api.Repositories;
 using PaymentGateway.Api.Services;
 
 namespace PaymentGateway.Api.Controllers;
@@ -15,13 +11,11 @@ namespace PaymentGateway.Api.Controllers;
 [ApiController]
 public class PaymentsController : Controller
 {
-    private readonly IPaymentsRepository _paymentsRepository;
-    private readonly IBankClient _bankClient;
+    private readonly IPaymentService _paymentService;
 
-    public PaymentsController(IPaymentsRepository paymentsRepository, IBankClient bankClient)
+    public PaymentsController(IPaymentService paymentService)
     {
-        _paymentsRepository = paymentsRepository;
-        _bankClient = bankClient;
+        _paymentService = paymentService;
     }
 
     [HttpPost]
@@ -29,45 +23,19 @@ public class PaymentsController : Controller
         [FromBody] PostPaymentRequest request,
         [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey)
     {
-        // Check for existing payment with same idempotency key
-        if (!string.IsNullOrWhiteSpace(idempotencyKey))
-        {
-            var existingPayment = await _paymentsRepository.GetByIdempotencyKeyAsync(idempotencyKey);
-            if (existingPayment != null)
-            {
-                return Ok(ApiResponse<PostPaymentResponse>.SuccessResponse(existingPayment));
-            }
-        }
+        var payment = await _paymentService.ProcessPaymentAsync(
+            request.CardNumber,
+            request.ExpiryMonth,
+            request.ExpiryYear,
+            request.Currency,
+            request.Amount,
+            request.Cvv,
+            idempotencyKey);
 
-        var bankRequest = new BankPaymentRequest
-        {
-            CardNumber = request.CardNumber,
-            ExpiryDate = $"{request.ExpiryMonth:D2}/{request.ExpiryYear}",
-            Currency = request.Currency,
-            Amount = request.Amount,
-            Cvv = request.Cvv
-        };
-
-        var bankResponse = await _bankClient.ProcessPaymentAsync(bankRequest);
-
-        if (bankResponse == null)
+        if (payment == null)
         {
             return StatusCode(503, ApiResponse<PostPaymentResponse>.ErrorResponse("Unable to process payment at this time"));
         }
-
-        var payment = new PostPaymentResponse
-        {
-            Id = Guid.NewGuid(),
-            Status = bankResponse.Authorized ? PaymentStatus.Authorized : PaymentStatus.Declined,
-            CardNumberLastFour = request.CardNumber.ExtractLastFourDigits(),
-            ExpiryMonth = request.ExpiryMonth,
-            ExpiryYear = request.ExpiryYear,
-            Currency = request.Currency,
-            Amount = request.Amount,
-            IdempotencyKey = idempotencyKey
-        };
-
-        await _paymentsRepository.AddAsync(payment);
 
         return Ok(ApiResponse<PostPaymentResponse>.SuccessResponse(payment));
     }
@@ -75,24 +43,13 @@ public class PaymentsController : Controller
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ApiResponse<GetPaymentResponse>>> GetPaymentAsync(Guid id)
     {
-        var payment = await _paymentsRepository.GetAsync(id);
+        var payment = await _paymentService.GetPaymentByIdAsync(id);
 
         if (payment == null)
         {
             return NotFound(ApiResponse<GetPaymentResponse>.ErrorResponse("Payment not found"));
         }
 
-        var response = new GetPaymentResponse
-        {
-            Id = payment.Id,
-            Status = payment.Status,
-            CardNumberLastFour = payment.CardNumberLastFour,
-            ExpiryMonth = payment.ExpiryMonth,
-            ExpiryYear = payment.ExpiryYear,
-            Currency = payment.Currency,
-            Amount = payment.Amount
-        };
-
-        return Ok(ApiResponse<GetPaymentResponse>.SuccessResponse(response));
+        return Ok(ApiResponse<GetPaymentResponse>.SuccessResponse(payment));
     }
 }

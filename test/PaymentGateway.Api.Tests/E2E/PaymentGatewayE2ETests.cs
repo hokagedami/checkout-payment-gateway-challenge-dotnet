@@ -18,7 +18,9 @@ namespace PaymentGateway.Api.Tests.E2E;
 public class PaymentGatewayE2ETests : IDisposable
 {
     private readonly HttpClient _client;
-    private readonly string _baseUrl;
+    private const string  TestApiKey = "test-api-key-1";
+    private const string  ValidCardNumber = "2222405343248877";
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -27,12 +29,12 @@ public class PaymentGatewayE2ETests : IDisposable
 
     public PaymentGatewayE2ETests()
     {
-        // Use environment variable for base URL, default to localhost for local testing
-        _baseUrl = Environment.GetEnvironmentVariable("PAYMENT_GATEWAY_URL") ?? "http://localhost:5000";
+        string baseUrl =
+            Environment.GetEnvironmentVariable("PAYMENT_GATEWAY_URL") ?? "http://localhost:5000";
         _client = new HttpClient
         {
-            BaseAddress = new Uri(_baseUrl),
-            Timeout = TimeSpan.FromSeconds(60) // Increased for retry policies
+            BaseAddress = new Uri(baseUrl),
+            Timeout = TimeSpan.FromSeconds(60)
         };
     }
 
@@ -44,7 +46,7 @@ public class PaymentGatewayE2ETests : IDisposable
         _client.DefaultRequestHeaders.Remove("Idempotency-Key");
 
         // Add API key for authentication
-        _client.DefaultRequestHeaders.Add("X-API-Key", "test-api-key-1");
+        _client.DefaultRequestHeaders.Add("X-API-Key", TestApiKey);
     }
 
     [Test]
@@ -53,7 +55,7 @@ public class PaymentGatewayE2ETests : IDisposable
         // Arrange
         var request = new PostPaymentRequest
         {
-            CardNumber = "2222405343248877", // Valid card number for bank simulator
+            CardNumber = ValidCardNumber,
             ExpiryMonth = 4,
             ExpiryYear = 2026,
             Currency = "GBP",
@@ -156,7 +158,7 @@ public class PaymentGatewayE2ETests : IDisposable
         // Arrange - First create a payment
         var postRequest = new PostPaymentRequest
         {
-            CardNumber = "2222405343248877",
+            CardNumber = ValidCardNumber,
             ExpiryMonth = 4,
             ExpiryYear = 2026,
             Currency = "EUR",
@@ -211,7 +213,7 @@ public class PaymentGatewayE2ETests : IDisposable
         {
             var request = new PostPaymentRequest
             {
-                CardNumber = "2222405343248877",
+                CardNumber = ValidCardNumber,
                 ExpiryMonth = 4,
                 ExpiryYear = 2026,
                 Currency = currency,
@@ -272,7 +274,7 @@ public class PaymentGatewayE2ETests : IDisposable
         // 1. Authorized payment
         var authorizedRequest = new PostPaymentRequest
         {
-            CardNumber = "2222405343248877",
+            CardNumber = ValidCardNumber,
             ExpiryMonth = 4,
             ExpiryYear = 2026,
             Currency = "GBP",
@@ -342,7 +344,7 @@ public class PaymentGatewayE2ETests : IDisposable
         var idempotencyKey = $"e2e-test-{Guid.NewGuid()}";
         var request = new PostPaymentRequest
         {
-            CardNumber = "2222405343248877",
+            CardNumber = ValidCardNumber,
             ExpiryMonth = 12,
             ExpiryYear = 2026,
             Currency = "USD",
@@ -389,7 +391,7 @@ public class PaymentGatewayE2ETests : IDisposable
         // Arrange
         var request = new PostPaymentRequest
         {
-            CardNumber = "2222405343248877",
+            CardNumber = ValidCardNumber,
             ExpiryMonth = 12,
             ExpiryYear = 2026,
             Currency = "EUR",
@@ -436,7 +438,7 @@ public class PaymentGatewayE2ETests : IDisposable
         // Arrange
         var request = new PostPaymentRequest
         {
-            CardNumber = "2222405343248877",
+            CardNumber = ValidCardNumber,
             ExpiryMonth = 12,
             ExpiryYear = 2026,
             Currency = "USD",
@@ -461,7 +463,7 @@ public class PaymentGatewayE2ETests : IDisposable
         // Arrange
         var request = new PostPaymentRequest
         {
-            CardNumber = "2222405343248877",
+            CardNumber = ValidCardNumber,
             ExpiryMonth = 12,
             ExpiryYear = 2026,
             Currency = "USD",
@@ -504,7 +506,7 @@ public class PaymentGatewayE2ETests : IDisposable
         // Arrange
         var request = new PostPaymentRequest
         {
-            CardNumber = "2222405343248877",
+            CardNumber = ValidCardNumber,
             ExpiryMonth = 12,
             ExpiryYear = 2026,
             Currency = "GBP",

@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using PaymentGateway.Api.Models.Requests;
 using PaymentGateway.Api.Models.Responses;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace PaymentGateway.Api.Tests.Controllers;
 
@@ -101,6 +102,12 @@ public abstract class PaymentsControllerTestBase
                 if (repositoryDescriptor != null)
                     services.Remove(repositoryDescriptor);
 
+                // Remove existing service registration
+                var serviceDescriptor = services.FirstOrDefault(d =>
+                    d.ServiceType == typeof(IPaymentService));
+                if (serviceDescriptor != null)
+                    services.Remove(serviceDescriptor);
+
                 var bankClientDescriptor = services.FirstOrDefault(d =>
                     d.ServiceType == typeof(IBankClient));
                 if (bankClientDescriptor != null)
@@ -113,6 +120,13 @@ public abstract class PaymentsControllerTestBase
                 // Add repository that uses the shared context
                 services.AddScoped<IPaymentsRepository>(sp => new PaymentsRepository(context));
                 services.AddSingleton(bankClient.Object);
+
+                // Add PaymentService with the mocked dependencies
+                services.AddScoped<IPaymentService>(sp =>
+                    new PaymentService(
+                        sp.GetRequiredService<IPaymentsRepository>(),
+                        sp.GetRequiredService<IBankClient>(),
+                        sp.GetRequiredService<ILogger<PaymentService>>()));
             });
         })
         .CreateClient();

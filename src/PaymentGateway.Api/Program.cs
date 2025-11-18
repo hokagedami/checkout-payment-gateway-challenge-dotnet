@@ -79,6 +79,7 @@ builder.Services.AddDbContext<PaymentGatewayDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddScoped<IPaymentsRepository, PaymentsRepository>();
+builder.Services.AddScoped<IPaymentService, PaymentService>();
 
 // Configure HttpClient for BankClient
 builder.Services.AddHttpClient<IBankClient, BankClient>(client =>

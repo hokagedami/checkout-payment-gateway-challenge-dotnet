@@ -51,19 +51,22 @@ This Payment Gateway API allows merchants to process payments by integrating wit
 - **Async/Await Throughout**: Non-blocking operations
 
 #### Clean Architecture
+- **Service Layer**: Business logic encapsulated in `PaymentService`, decoupling controllers from repositories
+- **Repository Pattern**: Data access abstracted through `IPaymentsRepository` interface
 - **Middleware-Based Validation**: ModelState validation handled by middleware for cleaner controllers
-- **Separation of Concerns**: Clear separation between validation, business logic, and error handling
+- **Separation of Concerns**: Clear separation between HTTP handling (Controller), business logic (Service), and data access (Repository)
 - **DRY Principle**: Reusable response wrappers and helper methods throughout
+- **Dependency Injection**: All dependencies injected via constructor for testability
 
 ### Quality Assurance
-- **201 comprehensive tests**
-  - 57 unit tests (Services: 6, Repositories: 9, Validation: 7, Helpers: 8, Models: 12, Middleware: 6, Authentication: 10)
+- **212 comprehensive tests**
+  - 68 unit tests (Services: 17, Repositories: 9, Validation: 7, Helpers: 8, Models: 12, Middleware: 6, Authentication: 10)
   - 128 integration tests (Controllers - feature-focused files, Middleware validation: 7)
   - 16 end-to-end tests (covering core functionality and edge cases)
 - NUnit test framework with [SetUp]/[TearDown] lifecycle
 - Test-Driven Development (TDD) approach
 - Docker-based E2E testing with real services (SQL Server, Bank API)
-- **Unit & Integration Pass Rate**: 100% (185/185 tests passing)
+- **Unit & Integration Pass Rate**: 100% (196/196 tests passing)
 - **E2E Pass Rate**: 100% (16/16 tests passing when services running)
 
 ## Quick Start
@@ -362,34 +365,41 @@ src/
       IPaymentsRepository.cs
       PaymentsRepository.cs
     Services/                        # Business logic & external services
-      BankClient.cs
+      BankClient.cs                  # Bank API integration
       IBankClient.cs
+      PaymentService.cs              # Business logic layer (decouples controller from repository)
+      IPaymentService.cs
     Validation/                      # Custom validation attributes
       FutureExpiryDateAttribute.cs
 
 test/
   PaymentGateway.Api.Tests/
-    Controllers/                     # Integration tests (123 tests)
+    Authentication/                  # Unit tests for authentication (10 tests)
+      ApiKeyAuthenticationHandlerTests.cs
+    Controllers/                     # Integration tests (128 tests)
       GetPaymentTests.cs             # 5 tests
       IdempotencyTests.cs            # 5 tests
       PaymentsControllerTestBase.cs  # Base class with ApiResponse helper methods
       PaymentValidationTests.cs      # 11 tests
       PostPaymentTests.cs            # 15 tests
       RejectedPaymentTests.cs        # 10 tests
-    E2E/                             # End-to-end tests (11 tests)
-      PaymentGatewayE2ETests.cs      # 11 tests - updated for ApiResponse wrapper
-    Helpers/                         # Unit tests for helpers (17 tests)
+    E2E/                             # End-to-end tests (16 tests)
+      PaymentGatewayE2ETests.cs      # 16 tests - covers core functionality and edge cases
+    Helpers/                         # Unit tests for helpers (8 tests)
       CardNumberExtensionsTests.cs
-    Middleware/                      # Unit tests for middleware (6 tests)
+    Middleware/                      # Unit tests for middleware (13 tests)
       GlobalExceptionHandlerTests.cs # 6 tests
-    Models/                          # Unit tests for model validation (103 tests)
-      PostPaymentRequestValidationTests.cs
+      ModelStateValidationFilterTests.cs  # 7 tests
+    Models/                          # Unit tests for models (12 tests)
+      ApiResponseTests.cs            # 10 tests
+      PostPaymentRequestValidationTests.cs  # 2 tests
     Repositories/                    # Unit tests for repositories (9 tests)
       PaymentsRepositoryTests.cs
-    Services/                        # Unit tests for services (6 tests)
-      BankClientTests.cs
+    Services/                        # Unit tests for services (17 tests)
+      BankClientTests.cs             # 6 tests
+      PaymentServiceTests.cs         # 11 tests - business logic unit tests
     Usings.cs                        # Global using statements
-    Validation/                      # Unit tests for validators (16 tests)
+    Validation/                      # Unit tests for validators (7 tests)
       FutureExpiryDateAttributeTests.cs
     PaymentGateway.Api.Tests.csproj  # Test project file
 
@@ -519,30 +529,34 @@ The application is configured to send logs to [Seq](https://datalust.co/seq) for
 ## Key Design Decisions
 
 ### Core Architecture
-1. **Repository Pattern**: Interface-based data access (IPaymentsRepository) for testability
-2. **Custom Validation**: Attribute-based validation with FutureExpiryDateAttribute
-3. **Card Masking**: Only last 4 digits stored for PCI compliance consideration
-4. **Rejected Payment Audit**: Failed validations are stored for analytics
-5. **Middleware-Based Validation**: ModelStateValidationFilter handles validation before controller actions
+1. **Layered Architecture**: Clear separation between Controller (HTTP) → Service (Business Logic) → Repository (Data Access)
+2. **Service Layer Pattern**: PaymentService encapsulates business logic, decoupling controller from repository
+3. **Repository Pattern**: Interface-based data access (IPaymentsRepository) for testability and flexibility
+4. **Dependency Injection**: All dependencies injected via constructor for loose coupling and testability
+5. **Custom Validation**: Attribute-based validation with FutureExpiryDateAttribute
+6. **Card Masking**: Only last 4 digits stored for PCI compliance consideration
+7. **Rejected Payment Audit**: Failed validations are stored for analytics
+8. **Middleware-Based Validation**: ModelStateValidationFilter handles validation before controller actions
 
 ### API Design & Error Handling
-6. **Unified Response Format**: ApiResponse<T> wrapper ensures consistent response structure across all endpoints
-7. **Global Exception Handler**: Centralized exception handling implementing RFC 7807 Problem Details
-8. **Semantic HTTP Status Codes**: Proper use of 200, 400, 404, 503 with descriptive error messages
-9. **Success/Error Flags**: Boolean `success` field for easy client-side handling
+9. **Unified Response Format**: ApiResponse<T> wrapper ensures consistent response structure across all endpoints
+10. **Global Exception Handler**: Centralized exception handling implementing RFC 7807 Problem Details
+11. **Semantic HTTP Status Codes**: Proper use of 200, 400, 404, 503 with descriptive error messages
+12. **Success/Error Flags**: Boolean `success` field for easy client-side handling
 
 ### Implemented Enhancements
-10. **SQL Server Persistence**: Production-grade database instead of in-memory storage
-11. **Async/Await Throughout**: All repository and service methods are async
-12. **API Key Authentication**: Simple but effective authentication for merchant identification
-13. **Idempotency First-Class**: Pre-validation check prevents duplicate processing
-14. **Structured Logging**: Serilog provides detailed observability
+13. **SQL Server Persistence**: Production-grade database instead of in-memory storage
+14. **Async/Await Throughout**: All repository and service methods are async
+15. **API Key Authentication**: Simple but effective authentication for merchant identification
+16. **Idempotency First-Class**: Pre-validation check prevents duplicate processing
+17. **Structured Logging**: Serilog provides detailed observability with contextual properties
 
 ### Testing Strategy
-15. **Comprehensive Test Coverage**: 37 unit, 123 integration, 11 E2E tests (171 total)
-16. **Feature-Focused Tests**: Split monolithic test files for maintainability
-17. **Docker-Based E2E**: Real services (SQL Server, Bank API) in containers
-18. **Test Helper Methods**: Reusable ReadApiResponseAsync<T> for consistent test patterns
+18. **Comprehensive Test Coverage**: 68 unit, 128 integration, 16 E2E tests (212 total)
+19. **Service Layer Testing**: 11 unit tests for business logic independently of HTTP/database
+20. **Feature-Focused Tests**: Split monolithic test files for maintainability
+21. **Docker-Based E2E**: Real services (SQL Server, Bank API) in containers
+22. **Test Helper Methods**: Reusable ReadApiResponseAsync<T> for consistent test patterns
 
 
 ## License
